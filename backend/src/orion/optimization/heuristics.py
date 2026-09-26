@@ -47,6 +47,7 @@ from orion.domain.plans import Assignment, SolverName, SolverRun, SolverStatus
 from orion.optimization.models import (
     SchedulingContext,
     SolverRequest,
+    dependency_bounds,
     schedule_sequence,
 )
 from orion.optimization.objective import task_value
@@ -67,6 +68,9 @@ def _insertion_options(
     weights = context.scenario.objective_weights
     options: list[tuple[float, str, int]] = []
     pair_indices = context.task_pairs.get(task_id, ())
+    # Finish times of tasks on *other* resources, so a prerequisite placed
+    # elsewhere still constrains this insertion.
+    external = dependency_bounds(context, sequences)
     for pair_index in pair_indices:
         pair = context.pairs[pair_index]
         resource_id = pair.resource_id
@@ -77,10 +81,16 @@ def _insertion_options(
         speed = resource.speed_factor
         for position in range(len(current) + 1):
             candidate = current[:position] + [task_id] + current[position:]
-            result = schedule_sequence(candidate, context, resource_id)
+            result = schedule_sequence(
+                candidate, context, resource_id, external_bounds=external
+            )
             if result is None:
                 continue
-            base = schedule_sequence(current, context, resource_id) if current else []
+            base = (
+                schedule_sequence(current, context, resource_id, external_bounds=external)
+                if current
+                else []
+            )
             if base is None:
                 continue
             delta_travel = sum(a.travel_distance_km for a in result) - sum(
@@ -104,13 +114,22 @@ def _insertion_options(
 def _rebuild(
     context: SchedulingContext, sequences: dict[str, list[str]]
 ) -> list[Assignment]:
-    """Materialise every resource's sequence into assignments."""
+    """Materialise every resource's sequence into assignments.
+
+    Scheduled in two passes so that a dependency whose endpoints are on
+    different resources is still honoured: the first pass places every task
+    without cross-resource precedence, the second re-schedules with the
+    finish times of the first pass as lower bounds.
+    """
+    first = dependency_bounds(context, sequences)
     out: list[Assignment] = []
     for resource_id in sorted(sequences):
         sequence = sequences[resource_id]
         if not sequence:
             continue
-        result = schedule_sequence(sequence, context, resource_id)
+        result = schedule_sequence(
+            sequence, context, resource_id, external_bounds=first
+        )
         if result is not None:
             out.extend(result)
     return out

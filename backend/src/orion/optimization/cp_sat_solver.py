@@ -72,7 +72,12 @@ import time
 from typing import Sequence
 
 from orion.domain.plans import Assignment, SolverName, SolverRun, SolverStatus
-from orion.optimization.models import SchedulingContext, SolverRequest, schedule_sequence
+from orion.optimization.models import (
+    SchedulingContext,
+    SolverRequest,
+    dependency_bounds,
+    schedule_sequence,
+)
 
 #: Objective coefficients are multiplied by this to keep CP-SAT on integers.
 #:
@@ -731,11 +736,19 @@ class CpSatSolver:
             if solver.Value(var):
                 by_resource.setdefault(pair.resource_id, []).append(pair.task_id)
 
+        # Rebuild with the reference earliest-start scheduler so that sequencing
+        # is byte-identical to what the heuristic and local search produce. The
+        # first pass supplies cross-resource dependency bounds, the second
+        # applies them; without this a task whose prerequisite sits on another
+        # resource would be scheduled before it.
+        first = dependency_bounds(context, by_resource)
         assignments: list[Assignment] = []
         for resource_id in sorted(by_resource):
             sequence = by_resource[resource_id]
             sequence.sort(key=lambda tid: (solver.Value(start[tid]), tid))
-            result = schedule_sequence(sequence, context, resource_id)
+            result = schedule_sequence(
+                sequence, context, resource_id, external_bounds=first
+            )
             if result is not None:
                 assignments.extend(result)
 

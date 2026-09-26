@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 from orion.domain.entities import Resource, Scenario, Task
 from orion.domain.plans import Assignment, Plan, SolverRun, SolverStatus
@@ -252,12 +252,36 @@ class SchedulingContext:
 # ==========================================================================
 # Feasibility helpers shared by every solver
 # ==========================================================================
+def dependency_bounds(
+    context: SchedulingContext, sequences: dict[str, list[str]]
+) -> dict[str, int]:
+    """Earliest start each placed task may take from its prerequisites.
+
+    Materialising every resource's sequence and returning ``{task_id: end}`` is
+    the only way to honour a dependency whose two endpoints sit on *different*
+    resources. A per-resource scheduler cannot see across resources by
+    construction, so this has to be computed at the plan level and fed back in.
+
+    Cost is one scheduling pass per resource, which is acceptable because the
+    heuristic calls it once per insertion decision and the sequences are short.
+    """
+    bounds: dict[str, int] = {}
+    for resource_id in sorted(sequences):
+        result = schedule_sequence(sequences[resource_id], context, resource_id)
+        if result is None:
+            continue
+        for a in result:
+            bounds[a.task_id] = a.end
+    return bounds
+
+
 def schedule_sequence(
     sequence: Sequence[str],
     context: SchedulingContext,
     resource_id: str,
     *,
     start_at: int | None = None,
+    external_bounds: Mapping[str, int] | None = None,
 ) -> list[Assignment] | None:
     """Greedily schedule *sequence* on *resource_id* as early as possible.
 
@@ -271,6 +295,12 @@ def schedule_sequence(
     satisfy the triangle inequality, which the Euclidean travel matrix does. That
     is why ORION's travel model is a metric: it makes earliest-start insertion
     sound.
+
+    ``external_bounds`` maps an already-scheduled task to its finish time on
+    *another* resource, and is how cross-resource precedence is enforced. A
+    dependency resolved inside *this* sequence is handled locally; one resolved
+    elsewhere can only be seen through this parameter, which is why every caller
+    that schedules a subset of a plan must supply it.
     """
     scenario = context.scenario
     resource = context.resource_by_id(resource_id)
@@ -286,6 +316,19 @@ def schedule_sequence(
     )
     # respect existing maintenance blocks: jump past them when needed
     assignments: list[Assignment] = []
+    # a sequence that lists a task before its own prerequisite cannot be fixed by
+    # earliest-start scheduling alone, so it is rejected outright
+    if constraints.enforce_dependencies:
+        seen: set[str] = set()
+        for task_id in sequence:
+            task = context.task_by_id(task_id)
+            if task is None:
+                return None
+            for dep in task.dependencies:
+                if dep in sequence and dep not in seen:
+                    return None
+            seen.add(task_id)
+
     for position, task_id in enumerate(sequence):
         task = context.task_by_id(task_id)
         if task is None:
@@ -304,11 +347,15 @@ def schedule_sequence(
         start = max(arrival, task.release_time, resource.shift_start, scenario.horizon.start)
         if constraints.enforce_dependencies:
             for dep in task.dependencies:
+                # a prerequisite on this resource: already in `assignments`
                 dep_assignment = next(
                     (a for a in assignments if a.task_id == dep), None
                 )
                 if dep_assignment is not None:
                     start = max(start, dep_assignment.end)
+                elif external_bounds is not None and dep in external_bounds:
+                    # a prerequisite on a different resource
+                    start = max(start, external_bounds[dep])
         end = start + task.duration
         if constraints.enforce_shift and end > resource.shift_end:
             return None
@@ -441,6 +488,7 @@ class SolveOutcome:
 
 __all__ = [
     "PairInfo",
+    "dependency_bounds",
     "SchedulingContext",
     "schedule_sequence",
     "sequence_is_feasible",
