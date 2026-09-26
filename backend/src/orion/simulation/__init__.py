@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from orion.simulation.disruptions import generate_disruptions, severity_params
 from orion.simulation.engine import (
     ReplanCallback,
     ResourceState,
@@ -19,6 +20,8 @@ from orion.simulation.events import (
 
 __all__ = [
     "SimulationEngine",
+    "generate_disruptions",
+    "severity_params",
     "SimulationResult",
     "WorldState",
     "ResourceState",

@@ -33,3 +33,6 @@ var/
 # OS
 .DS_Store
 Thumbs.db
+
+# Downloaded benchmark archives (re-fetched on demand; checksums in data/PROVENANCE.md)
+data/cache/

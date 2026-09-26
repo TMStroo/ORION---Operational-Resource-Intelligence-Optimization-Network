@@ -1,0 +1,14 @@
+# Constraints tighten progressively along two axes.
+#   python -m orion benchmark --config configs/constraint_pressure.yaml --suite constraint_pressure
+kind: benchmark
+description: >-
+  Feasibility, runtime and quality as resource availability falls
+  (100/80/60/40/20 %) and deadline tightness rises (0.2/0.5/0.8/0.95).
+seed: 2026
+scenario:
+  level: medium
+  seed: 2026
+  maintenance_count: 2
+solvers: [LOCAL_SEARCH]
+time_budgets: [10.0]
+weight_provenance: constraint_pressure

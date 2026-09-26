@@ -1,0 +1,19 @@
+# Disruption stress test: rate x severity x strategy.
+#   python -m orion benchmark --config configs/disruption.yaml --suite disruption_stress
+kind: benchmark
+description: >-
+  Service degradation, replanning time, recovered service and plan churn for
+  no-replan vs local repair vs full re-optimization, across disruption rate
+  (0/5/10/20/30 %) and severity (low/medium/high).
+seed: 2026
+scenario:
+  level: medium
+  seed: 2026
+  maintenance_count: 2
+solvers: [LOCAL_SEARCH]
+time_budgets: [5.0]
+disruption:
+  rate: 0.10
+  severity: medium
+  seed: 7
+weight_provenance: reported

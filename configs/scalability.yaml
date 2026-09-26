@@ -1,0 +1,12 @@
+# Runtime and quality vs problem size.
+#   python -m orion benchmark --config configs/scalability.yaml --suite scalability
+kind: benchmark
+description: Runtime and solution quality versus problem size, for four solvers.
+seed: 2026
+scenario:
+  level: medium
+  seed: 2026
+  maintenance_count: 2
+solvers: [HEURISTIC, LOCAL_SEARCH, CP_SAT, MIN_COST_FLOW]
+time_budgets: [5.0, 30.0]
+weight_provenance: reported

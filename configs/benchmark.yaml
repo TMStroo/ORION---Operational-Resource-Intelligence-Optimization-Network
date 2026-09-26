@@ -1,0 +1,71 @@
+# Reproducible benchmark suite.
+#   python -m orion benchmark --config configs/benchmark.yaml
+#
+# Every field here changes a number, which is why nothing in the benchmark code
+# is a Python literal. Validate with:
+#   python -m orion config validate --config configs/benchmark.yaml
+kind: benchmark
+description: >-
+  Solver comparison and time-budget trade-off on public Solomon VRPTW instances
+  and the synthetic operational suite, at matched budgets.
+
+seed: 2026
+output_dir: experiments
+results_dir: results
+figures_dir: docs/figures
+cache_dir: data/cache
+cache_results: true
+
+scenario:
+  level: medium
+  seed: 2026
+  maintenance_count: 2
+  scarcity: 1.0
+  deadline_tightness: 0.5
+  dependency_rate: 0.15
+
+# Local search is the default operating point; CP-SAT and the heuristic bracket
+# it. MILP is included because the report documents how it degrades.
+solvers:
+  - HEURISTIC
+  - LOCAL_SEARCH
+  - CP_SAT
+  - MIN_COST_FLOW
+
+# Matched budgets. A solver is never compared at a budget another one was not
+# given, unless the time_budget suite explicitly sweeps it.
+time_budgets:
+  - 5.0
+  - 30.0
+
+disruption:
+  rate: 0.0
+  severity: medium
+  seed: 7
+
+# eval split: these instances were never read while tuning the defaults.
+benchmarks:
+  - name: solomon-clustered
+    dataset: solomon
+    instances: [c101, c201]
+    split: eval
+  - name: solomon-random
+    dataset: solomon
+    instances: [r101, r201]
+    split: eval
+  - name: jobshop-ft10
+    dataset: jobshop
+    instances: [ft10]
+    split: val
+
+objective_weights:
+  w_completion: 10.0
+  w_priority: 2.0
+  w_late: 0.4
+  w_travel: 0.02
+  w_cost: 0.01
+  w_dispatch: 0.05
+  w_overload: 0.5
+  w_move_idle: 0.02
+  w_violation: 50.0
+weight_provenance: reported
