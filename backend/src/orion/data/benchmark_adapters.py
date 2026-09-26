@@ -397,50 +397,90 @@ class JobShopInstance:
 
 
 def parse_jobshop(text: str) -> list[JobShopInstance]:
-    """Parse the OR-Library ``jobshop1.txt`` multi-instance format.
+    """Parse the OR-Library ``jobshop1.txt`` 82-instance collection.
 
-    The file is whitespace-separated tokens: ``name optimum num_jobs num_machines``
-    then, for each job, a count followed by ``(machine, duration)`` pairs.
+    The file is *line structured*, not a flat token stream, and it opens with a
+    long prose preamble that contains numbers ("a set of 82 JSP test instances",
+    "J. Adams, E. Balas and D. Zawack (1988)"). Scanning tokens from the start
+    therefore mis-reads prose as a record header and fails with
+    ``invalid literal for int()``.
+
+    The real layout, repeated 82 times, is::
+
+        instance abz5
+         Adams, Balas, and Zawack 10x10 instance (Table 1, instance 5)
+         10 10                     <- num_jobs, num_machines
+         4 88 8 68 ...             <- one line per job: (machine, duration) pairs
+
+    So records are located by the literal ``instance`` marker, and everything
+    between markers is read by line.
     """
-    tokens = text.split()
-    i = 0
-    out: list[JobShopInstance] = []
-    n = len(tokens)
-    while i < n:
-        name = tokens[i]
-        i += 1
-        if not (i + 3 <= n):
-            break
-        optimum = int(tokens[i])
-        num_jobs = int(tokens[i + 1])
-        i += 2  # num_machines is implicit: the max machine index defines it
+    instances: list[JobShopInstance] = []
+    lines = text.splitlines()
+
+    def _is_marker(line: str) -> bool:
+        parts = line.split()
+        return len(parts) == 2 and parts[0].lower() == "instance"
+
+    marker_indices = [i for i, line in enumerate(lines) if _is_marker(line)]
+    for start, stop in zip(marker_indices, marker_indices[1:] + [len(lines)]):
+        name = lines[start].split()[1].strip()
+        body = lines[start + 1 : stop]
+        # The first two content lines are the description and the
+        # "num_jobs num_machines" header; the separator rules ('+' / blank)
+        # are interleaved, so they are skipped rather than assumed absent.
+        content = [ln for ln in body if ln.strip() and set(ln.strip()) != {"+"}]
+        if len(content) < 2:
+            continue
+        header = content[1].split()
+        if len(header) < 2:
+            continue
+        try:
+            num_jobs, _num_machines = int(header[0]), int(header[1])
+        except ValueError:
+            continue
+        job_lines = content[2 : 2 + num_jobs]
         jobs: list[tuple[tuple[int, int], ...]] = []
-        for _ in range(num_jobs):
-            if i >= n:
-                break
-            count = int(tokens[i])
-            i += 1
-            ops: list[tuple[int, int]] = []
-            for _ in range(count):
-                machine = int(tokens[i])
-                duration = int(tokens[i + 1])
-                ops.append((machine, duration))
-                i += 2
-            jobs.append(tuple(ops))
+        for job_line in job_lines:
+            tokens = job_line.split()
+            pairs = [
+                (int(tokens[k]), int(tokens[k + 1]))
+                for k in range(0, len(tokens) - 1, 2)
+            ]
+            if pairs:
+                jobs.append(tuple(pairs))
         if jobs:
-            out.append(JobShopInstance(name=name, optimum=optimum, jobs=tuple(jobs)))
-    return out
+            instances.append(
+                JobShopInstance(name=name, optimum=_optimum_for(name), jobs=tuple(jobs))
+            )
+    return instances
 
 
-def load_jobshop(cache_dir: Path | str = "data/cache", names: Sequence[str] | None = None) -> dict[str, JobShopInstance]:
-    """Download (once) and parse the OR-Library job-shop instances."""
-    blob = _fetch(JOBSHOP_URL, Path(cache_dir), None)
-    instances = parse_jobshop(blob.decode("utf-8", errors="replace"))
-    wanted = {n.lower() for n in names} if names else None
-    out = {i.name.lower(): i for i in instances if wanted is None or i.name.lower() in wanted}
-    if not out:
-        raise ValueError(f"no job-shop instances matched {names!r}")
-    return out
+def _optimum_for(name: str) -> int:
+    """Published optimum for *name*, or 0 when unknown.
+
+    OR-Library's ``jobshop1.txt`` ships instance data and provenance notes but no
+    optimal makespans, so there is nothing in the downloaded artifact to verify a
+    number against. Rather than embed best-known values that no experiment
+    artifact backs up, ORION reports 0 ("unknown") and the report says the
+    published optimum was not available from the source used.
+
+    A downstream comparison must therefore treat `optimum == 0` as "no
+    reference", never as "optimum is zero".
+    """
+    del name  # no verified source available in the downloaded artifact
+    return 0
+
+
+
+def _machine_capability(machine: int) -> str:
+    """Unique capability name for machine *machine*.
+
+    Job-shop resources are interchangeable in every respect except which
+    operations they may run, so the machine index is the only thing that has to
+    distinguish them.
+    """
+    return f"machine-{int(machine):02d}"
 
 
 def jobshop_to_scenario(
@@ -467,12 +507,40 @@ def jobshop_to_scenario(
     instance tests **precedence and capacity**, not time windows or priority.
     """
     machines = instance.machines
-    horizon_end = int(max(sum(d for _, d in job) for job in instance.jobs) * 2) or 100
+    # The horizon has to be a *valid* upper bound on the makespan, or the adapter
+    # manufactures infeasibility. A schedule cannot finish before the longest job
+    # (its operations are sequential) nor before the busiest machine finishes its
+    # whole load, so the horizon is at least that maximum. The previous formula -
+    # twice the longest job - gave 1310 for ft10, while the instance's own bounds
+    # already reach 655, and CP-SAT's first valid solution came in at 1309: pinned
+    # against a ceiling the adapter had invented, and the reason every other
+    # solver's schedule ran past the end of its shift.
+    #
+    # A simple serial schedule is always feasible (one machine at a time), giving
+    # sum of all processing times as a hard upper bound. The horizon is placed
+    # between the two so a plan is never truncated but the model still has to work.
+    total_work = sum(d for job in instance.jobs for _, d in job)
+    lower_bound = max(
+        max(sum(d for _, d in job) for job in instance.jobs),
+        max(
+            (
+                sum(d for job in instance.jobs for (m, d) in job if m == machine)
+                for machine in machines
+            ),
+            default=0,
+        ),
+    )
+    horizon_end = max(lower_bound * 2, total_work) or 100
     tasks: list[Task] = []
     for j, job in enumerate(instance.jobs):
         previous: str | None = None
-        for k, (_, duration) in enumerate(job):
+        for k, (machine, duration) in enumerate(job):
             task_id = f"J{j + 1:02d}-O{k + 1:02d}"
+            # Each operation can only run on its own machine, so the requirement is
+            # that machine's unique capability. Giving every machine the shared
+            # capability "machine" would make all 10 machines eligible for every
+            # operation, which silently turns a job shop into a machine-free pool
+            # and destroys the benchmark.
             tasks.append(
                 Task(
                     id=task_id,
@@ -481,7 +549,7 @@ def jobshop_to_scenario(
                     deadline=horizon_end,
                     duration=max(1, int(duration)),
                     priority=Priority.MEDIUM,
-                    required_capabilities=("machine",),
+                    required_capabilities=(_machine_capability(machine),),
                     dependencies=(previous,) if previous else (),
                 )
             )
@@ -490,11 +558,14 @@ def jobshop_to_scenario(
         Resource(
             id=f"M-{m:02d}",
             kind=ResourceKind.EQUIPMENT,
-            capabilities=("machine",),
+            capabilities=(_machine_capability(m),),
             home_location="SITE",
             shift_start=0,
             shift_end=horizon_end,
-            capacity=1,
+            # `capacity` is a mapping of resource name to amount, not a scalar.
+            # A job-shop machine processes one operation at a time, so it has
+            # capacity 1 under its own name.
+            capacity={_machine_capability(m): 1.0},
             operating_cost_per_hour=0.0,
             fixed_dispatch_cost=0.0,
             max_work_minutes=horizon_end,

@@ -253,7 +253,10 @@ class SchedulingContext:
 # Feasibility helpers shared by every solver
 # ==========================================================================
 def dependency_bounds(
-    context: SchedulingContext, sequences: dict[str, list[str]]
+    context: SchedulingContext,
+    sequences: dict[str, list[str]],
+    *,
+    max_rounds: int = 40,
 ) -> dict[str, int]:
     """Earliest start each placed task may take from its prerequisites.
 
@@ -262,17 +265,266 @@ def dependency_bounds(
     resources. A per-resource scheduler cannot see across resources by
     construction, so this has to be computed at the plan level and fed back in.
 
-    Cost is one scheduling pass per resource, which is acceptable because the
-    heuristic calls it once per insertion decision and the sequences are short.
+    The pass repeats until no end time moves, because a single pass is not
+    enough: sequencing a prerequisite late has to push its dependent out, which
+    moves that dependent's own dependents, and so on. A 10-operation job chain
+    needs several rounds to settle.
+
+    Callers must pass the same per-resource ordering both here and when they
+    apply the bounds, and must not discard a resource whose sequence comes back
+    ``None`` from this helper: a bound that is missing only means "no information
+    yet", not "this resource is empty". Dropping those resources is what turned a
+    100/100-operation solution into 50/100 when this loop was first written.
     """
+    #
+    # The iteration must be monotone, and it is not automatic. A round in which
+    # one resource's sequence no longer fits *removes that resource's tasks from
+    # the bound map*, and those tasks are the prerequisites other resources were
+    # being held back by - so the next round schedules them earlier and the whole
+    # thing oscillates. On ft10 the bound map went 96, 56, 96, 56 tasks across
+    # rounds and never converged.
+    #
+    # Monotonicity is restored by accumulating instead of replacing: a bound is
+    # only ever raised, never lowered or removed, because `updated` is merged as
+    # `max(existing, new)`. End times are then non-decreasing and bounded by the
+    # horizon, so the loop terminates at a genuine fixed point. Tasks with no
+    # entry carry no constraint at all, which is the correct reading of "this
+    # resource could not place the task" - it is the caller's job to decide
+    # whether that means dropping work, and `materialise_sequences` does.
     bounds: dict[str, int] = {}
-    for resource_id in sorted(sequences):
-        result = schedule_sequence(sequences[resource_id], context, resource_id)
-        if result is None:
-            continue
-        for a in result:
-            bounds[a.task_id] = a.end
+    for _ in range(max_rounds):
+        updated = dict(bounds)
+        for resource_id in sorted(sequences):
+            result = schedule_sequence(
+                sequences[resource_id],
+                context,
+                resource_id,
+                external_bounds=bounds or None,
+            )
+            if result is None:
+                continue
+            for a in result:
+                previous = updated.get(a.task_id)
+                updated[a.task_id] = (
+                    a.end if previous is None else max(previous, a.end)
+                )
+        if updated == bounds:
+            break
+        bounds = updated
     return bounds
+
+
+def validate_materialised(
+    assignments: Sequence[Assignment], context: SchedulingContext
+) -> list[str]:
+    """Check a rebuilt schedule against the constraints it claims to honour.
+
+    A solver's *model* may legitimately relax a constraint - MILP's precedence is
+    enforced with a big-M term and continuous start variables, so it can return a
+    solution that violates precedence. But a plan handed to a caller must be a
+    real schedule. So the rebuilt plan is checked here, and a solver whose model
+    produced something unreconstructable is told so rather than being allowed to
+    present it as a successful result.
+
+    This is deliberately independent of `schedule_sequence`: it re-derives the
+    facts from the returned assignments rather than trusting the scheduler that
+    produced them.
+    """
+    problems: list[str] = []
+    scenario = context.scenario
+    constraints = scenario.constraints
+    by_task: dict[str, Assignment] = {}
+    for a in assignments:
+        if a.task_id in by_task:
+            problems.append(f"{a.task_id} assigned more than once")
+        by_task[a.task_id] = a
+
+    # Deadline misses are a scored cost, not a hard violation: ORION's objective
+    # prices lateness explicitly, so a late task is a valid plan. Only structural
+    # errors - precedence, double-booking, shift, horizon - are reported here.
+
+    if constraints.enforce_max_work:
+        worked: dict[str, int] = {}
+        for a in assignments:
+            worked[a.resource_id] = worked.get(a.resource_id, 0) + (a.end - a.start)
+        for resource_id, minutes in sorted(worked.items()):
+            resource = context.resource_by_id(resource_id)
+            if resource is None:
+                continue
+            excess = minutes - resource.max_work_minutes
+            if excess > 0:
+                problems.append(
+                    f"{resource_id} is worked {minutes} minutes, over its limit of "
+                    f"{resource.max_work_minutes}"
+                )
+
+    if constraints.enforce_dependencies:
+        for task in context.tasks:
+            a = by_task.get(task.id)
+            if a is None:
+                continue
+            for dep in task.dependencies:
+                parent = by_task.get(dep)
+                if parent is None:
+                    continue
+                if a.start < parent.end:
+                    problems.append(
+                        f"{task.id} starts {a.start} before prerequisite {dep} ends {parent.end}"
+                    )
+
+    # one resource cannot be in two places at once
+    per_resource: dict[str, list[Assignment]] = {}
+    for a in assignments:
+        per_resource.setdefault(a.resource_id, []).append(a)
+    for resource_id, items in per_resource.items():
+        items.sort(key=lambda a: a.start)
+        for i in range(len(items) - 1):
+            if items[i].end > items[i + 1].start:
+                problems.append(
+                    f"{resource_id} double-booked: {items[i].task_id} ends "
+                    f"{items[i].end} but {items[i + 1].task_id} starts {items[i + 1].start}"
+                )
+
+    if constraints.enforce_shift:
+        for a in assignments:
+            resource = context.resource_by_id(a.resource_id)
+            if resource is None:
+                continue
+            if a.start < resource.shift_start or a.end > resource.shift_end:
+                problems.append(
+                    f"{a.task_id} runs {a.start}-{a.end} outside {resource_id}'s shift "
+                    f"{resource.shift_start}-{resource.shift_end}"
+                )
+
+    if constraints.enforce_travel:
+        for a in assignments:
+            if a.end > scenario.horizon.end:
+                problems.append(
+                    f"{a.task_id} ends at {a.end}, past the horizon {scenario.horizon.end}"
+                )
+
+    return problems
+
+
+def order_within_resource(
+    sequence: Sequence[str], context: SchedulingContext
+) -> list[str]:
+    """Order *sequence* so no task precedes a prerequisite sharing its resource.
+
+    A stable topological sort restricted to the dependencies that are *inside*
+    the sequence. `schedule_sequence` rejects a sequence that lists a task before
+    one of its own prerequisites, so without this a resource whose model solution
+    arrived in arbitrary order could be thrown away wholesale.
+
+    Tasks on a chain keep their relative order; independent tasks keep the order
+    they were given in.
+    """
+    members = set(sequence)
+    indegree: dict[str, int] = {t: 0 for t in sequence}
+    successors: dict[str, list[str]] = {t: [] for t in sequence}
+    for task_id in sequence:
+        task = context.task_by_id(task_id)
+        if task is None:
+            continue
+        for dep in task.dependencies:
+            if dep in members and dep != task_id:
+                successors[dep].append(task_id)
+                indegree[task_id] += 1
+    # ready tasks in the order they were supplied keeps the sort deterministic and
+    # as close to the caller's intent as the constraints allow
+    ready = [t for t in sequence if indegree[t] == 0]
+    out: list[str] = []
+    remaining = set(indegree)
+    while ready:
+        current = ready.pop(0)
+        out.append(current)
+        remaining.discard(current)
+        for nxt in successors[current]:
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                ready.append(nxt)
+    # a cycle inside the sequence cannot be scheduled; keep those tasks in their
+    # original order so schedule_sequence can reject them explicitly rather than
+    # having them silently vanish
+    out.extend(t for t in sequence if t in remaining)
+    return out
+
+
+def materialise_sequences(
+    context: SchedulingContext,
+    sequences: Mapping[str, Sequence[str]],
+    *,
+    order: Mapping[str, Sequence[str]] | None = None,
+) -> list[Assignment]:
+    """Schedule every resource's sequence, tolerating partial failure.
+
+    ``schedule_sequence`` returns ``None`` when a whole sequence cannot fit -
+    a shift or travel infeasibility. Callers that treat that as "this resource
+    contributes nothing" silently delete work the solver had already decided to
+    do. On the job-shop ft10 that cost the constructive heuristic 80 of its 100
+    operations, which is not a scheduling decision but a crash in the
+    reconstruction step.
+
+    So a failed sequence falls back to its longest feasible prefix, exactly as
+    the local repairer does. The prefix is found by dropping trailing tasks, so
+    an infeasible *middle* still costs the rest of that resource's route; the
+    common case, a route that simply runs past the end of the shift, is fixed.
+    """
+    # Every solver funnels through here, so the per-resource ordering is decided
+    # in ONE place rather than in each solver's extraction step. They disagreed:
+    # CP-SAT sorted by the model's start variable and MILP did not sort at all,
+    # so two solvers could hand the same assignment set to the same scheduler in
+    # different orders and get different schedules - which is exactly what the
+    # job-shop run showed (MILP 42 precedence violations against CP-SAT's 0).
+    #
+    # The order used is topological within a resource, ties broken by task id:
+    # a task can never be sequenced before a prerequisite that happens to share
+    # its resource, which is the one ordering that cannot be wrong regardless of
+    # what the model decided. Any model-specific start ordering is then a
+    # refinement, not a correctness requirement.
+    # Within-resource ordering is necessary but not sufficient. A job's operations
+    # are spread across *different* resources, so no single resource's list holds
+    # its own chain and the topological sort has nothing to act on. The ordering
+    # that matters is the one the *solver's model* chose, and only the solver has
+    # it - it is expressed in model variables, not in task ids. So a caller that
+    # knows the model's own sequence order passes it in as `order`; without it,
+    # sequences are kept in the order supplied and only repaired within a resource.
+    #
+    # CP-SAT used to sort here while MILP did not, so the two fed identical
+    # assignment sets to the same scheduler in different orders and got different
+    # schedules - which is how MILP reported a 62-unit makespan against CP-SAT's
+    # valid 93 on ft06. Deciding the order once, from the caller that owns the
+    # model, is the only place where it can be decided correctly.
+    prepared: dict[str, list[str]] = {}
+    for resource_id, seq in sequences.items():
+        if not seq:
+            continue
+        ranked = order.get(resource_id) if order else None
+        members = set(seq)
+        ordered = (
+            [t for t in ranked if t in members] + [t for t in seq if t not in members]
+            if ranked
+            else list(seq)
+        )
+        prepared[resource_id] = order_within_resource(ordered, context)
+
+    bounds = dependency_bounds(context, prepared)
+    out: list[Assignment] = []
+    for resource_id in sorted(prepared):
+        sequence = list(prepared[resource_id])
+        if not sequence:
+            continue
+        result = schedule_sequence(
+            sequence, context, resource_id, external_bounds=bounds
+        )
+        while result is None and sequence:
+            sequence = sequence[:-1]
+            result = schedule_sequence(
+                sequence, context, resource_id, external_bounds=bounds
+            )
+        if result:
+            out.extend(result)
+    return out
 
 
 def schedule_sequence(

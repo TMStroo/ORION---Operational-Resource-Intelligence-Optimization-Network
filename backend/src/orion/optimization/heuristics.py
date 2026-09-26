@@ -48,6 +48,7 @@ from orion.optimization.models import (
     SchedulingContext,
     SolverRequest,
     dependency_bounds,
+    materialise_sequences,
     schedule_sequence,
 )
 from orion.optimization.objective import task_value
@@ -121,18 +122,7 @@ def _rebuild(
     without cross-resource precedence, the second re-schedules with the
     finish times of the first pass as lower bounds.
     """
-    first = dependency_bounds(context, sequences)
-    out: list[Assignment] = []
-    for resource_id in sorted(sequences):
-        sequence = sequences[resource_id]
-        if not sequence:
-            continue
-        result = schedule_sequence(
-            sequence, context, resource_id, external_bounds=first
-        )
-        if result is not None:
-            out.extend(result)
-    return out
+    return materialise_sequences(context, sequences)
 
 
 def constructive_plan(

@@ -76,6 +76,7 @@ from orion.optimization.models import (
     SchedulingContext,
     SolverRequest,
     dependency_bounds,
+    materialise_sequences,
     schedule_sequence,
 )
 
@@ -741,16 +742,20 @@ class CpSatSolver:
         # first pass supplies cross-resource dependency bounds, the second
         # applies them; without this a task whose prerequisite sits on another
         # resource would be scheduled before it.
-        first = dependency_bounds(context, by_resource)
-        assignments: list[Assignment] = []
-        for resource_id in sorted(by_resource):
-            sequence = by_resource[resource_id]
-            sequence.sort(key=lambda tid: (solver.Value(start[tid]), tid))
-            result = schedule_sequence(
-                sequence, context, resource_id, external_bounds=first
+        #
+        # The orderings MUST match between the two passes. `dependency_bounds`
+        # schedules each resource's list in the order given, so a bound computed
+        # on one ordering and applied to another is stale: the prerequisite's end
+        # time it refers to was produced by a different schedule. On ft10 that
+        # mismatch left 48 of 100 operations starting before their prerequisite
+        # finished, while the model - which does enforce precedence - reported
+        # OPTIMAL. So each sequence is sorted first, and the same list is used
+        # for both passes.
+        for resource_id in by_resource:
+            by_resource[resource_id].sort(
+                key=lambda tid: (solver.Value(start[tid]), tid)
             )
-            if result is not None:
-                assignments.extend(result)
+        assignments = materialise_sequences(context, by_resource)
 
         internal_objective = solver.ObjectiveValue() / SCALE
         bound = solver.BestObjectiveBound() / SCALE

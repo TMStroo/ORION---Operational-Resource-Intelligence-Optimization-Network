@@ -67,6 +67,7 @@ from orion.optimization.models import (
     SchedulingContext,
     SolverRequest,
     dependency_bounds,
+    materialise_sequences,
     schedule_sequence,
 )
 
@@ -459,16 +460,16 @@ class MilpSolver:
             if var.solution_value() > 0.5:
                 by_resource.setdefault(pair.resource_id, []).append(pair.task_id)
 
-        first = dependency_bounds(context, by_resource)
-        assignments: list[Assignment] = []
-        for resource_id in sorted(by_resource):
-            sequence = by_resource[resource_id]
-            sequence.sort(key=lambda tid: (start[tid].solution_value(), tid))
-            result = schedule_sequence(
-                sequence, context, resource_id, external_bounds=first
+        # The model knows the order it intended; hand that to the materialiser.
+        # `context.pairs` is not ordered by the solution, and CP-SAT already
+        # sorted before rebuilding, so leaving MILP unsorted meant the two solvers
+        # fed identical assignment sets to the same scheduler in different orders.
+        for resource_id in by_resource:
+            by_resource[resource_id].sort(
+                key=lambda tid: (start[tid].solution_value(), tid)
             )
-            if result is not None:
-                assignments.extend(result)
+
+        assignments = materialise_sequences(context, by_resource)
 
         internal = solver.Objective().Value()
         bound = solver.Objective().BestBound()

@@ -26,7 +26,7 @@ from orion.optimization.heuristics import ConstructiveHeuristic
 from orion.optimization.local_search import LocalSearchSolver
 from orion.optimization.milp_solver import MilpSolver, available_backend
 from orion.optimization.min_cost_flow import MinCostFlowSolver
-from orion.optimization.models import SchedulingContext, SolverRequest
+from orion.optimization.models import SchedulingContext, validate_materialised, SolverRequest
 
 SolverFactory = Callable[..., Any]
 
@@ -355,6 +355,41 @@ def run_solver(
         # diagnosis. This is what makes the benchmark table meaningful: every
         # row is scored the same way, by code that did not participate in
         # solving.
+        # A solver's *model* may legitimately relax a constraint - MILP enforces
+        # precedence with a big-M term over continuous start variables, so it can
+        # return a solution that breaks it, and that is what RELAXATION_OPTIMAL
+        # means. But a *plan* handed to a caller has to be a real schedule, so the
+        # rebuilt assignments are validated here before anything is scored.
+        #
+        # Without this the job-shop run reported MILP as a 62-unit makespan on a
+        # schedule with 22 violated precedence relations: a better-looking number
+        # than CP-SAT's valid 93, obtained from an invalid plan. A structural
+        # failure is not a quality difference, so it is reported as ERROR rather
+        # than silently ranked.
+        structural = validate_materialised(plan.assignments, context)
+        if structural and plan.assignments:
+            return SolveResult(
+                solver=name,
+                plan=plan,
+                run=replace(
+                    run,
+                    status=SolverStatus.ERROR,
+                    feasible=False,
+                    objective=0.0,
+                    notes=(
+                        f"model solution could not be rebuilt into a valid schedule "
+                        f"({len(structural)} structural problems): {structural[0]}"
+                    ),
+                    raw={**dict(run.raw), "structural_problems": structural[:10]},
+                ),
+                diagnostics={**diagnostics, "structural_problems": structural},
+                applicable=True,
+                reason=(
+                    "rebuilt schedule violates hard constraints; the solver's own "
+                    "status is preserved in the run notes"
+                ),
+            )
+
         scored = plan.objective.total
         internal = run.objective
         if run.status in _COMPARABLE_STATUSES and plan.assignments:
