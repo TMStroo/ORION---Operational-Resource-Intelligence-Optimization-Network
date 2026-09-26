@@ -1,0 +1,17 @@
+{
+  "failures": {
+    "deadline_collapse": {
+      "count": 5,
+      "worst_severity": 2,
+      "representative": {
+        "category": "deadline_collapse",
+        "scenario": "orion-medium",
+        "detail": "15/23 dispatched tasks are late",
+        "root_cause": "deadline slack too small relative to travel and duration",
+        "consequence": "service level collapses; the plan is technically feasible but useless",
+        "mitigation": "widen w_late or the time windows before trusting the plan",
+        "severity": 2
+      }
+    }
+  }
+}

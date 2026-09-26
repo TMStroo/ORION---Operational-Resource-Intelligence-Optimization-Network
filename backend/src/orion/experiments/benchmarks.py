@@ -48,7 +48,7 @@ from orion.evaluation.metrics import (
 )
 from orion.experiments.tracker import ExperimentStore, ExperimentTimer, RunRecord
 from orion.optimization.registry import run_solver
-from orion.planning.comparison import build_recovery_report, compute_churn
+from orion.planning.comparison import build_recovery_report, compute_churn, degraded_plan_from
 from orion.planning.planner import Planner
 from orion.planning.replanner import Replanner
 from orion.simulation.disruptions import generate_disruptions
@@ -108,6 +108,49 @@ def run_single(
     )
     result = planner.plan(scenario, explain=False)
     plan = result.plan
+
+    # A solver that raised must never be recorded as a successful run. This
+    # guard exists because it previously was not: an exception inside a solver
+    # produced a Plan with no assignments, status FEASIBLE and objective 0.0,
+    # and that row went into the benchmark table indistinguishable from a real
+    # result. An empty plan from a solver that reports success is legitimate
+    # (a genuinely infeasible instance), so the distinction is made on the
+    # solver's reported status, not on emptiness.
+    failed_runs = [r for r in plan.solver_runs if r.status == SolverStatus.ERROR]
+    if failed_runs:
+        message = "; ".join(f"{r.solver}: {r.notes or 'no detail recorded'}" for r in failed_runs)
+        return plan, [
+            FailureRecord(
+                FailureCategory.SOLVER_ERROR,
+                scenario.name,
+                f"solver {failed_runs[0].solver} raised: {message}",
+                root_cause="the solver hit an unexpected exception; no plan was produced",
+                consequence="this row carries no solution and must not be compared",
+                mitigation="fix the solver, or exclude it from this suite",
+                severity=3,
+            )
+        ], RunRecord(
+            benchmark=benchmark,
+            instance=instance,
+            solver=solver,
+            time_budget_s=time_budget_s,
+            seed=seed,
+            status=SolverStatus.ERROR,
+            runtime_s=max((r.runtime_s for r in plan.solver_runs), default=0.0),
+            objective=None,
+            service_level=None,
+            tasks_assigned=0,
+            late_tasks=None,
+            travel_km=None,
+            operating_cost=None,
+            violations=None,
+            model_variables=max((r.num_variables for r in plan.solver_runs), default=0),
+            model_constraints=max((r.num_constraints for r in plan.solver_runs), default=0),
+            optimality_gap=None,
+            split=split,
+            notes=message[:500],
+        )
+
     records = detect_failures(plan, scenario, reference_score=plan.objective.total)
     run = RunRecord(
         benchmark=benchmark,
@@ -123,7 +166,7 @@ def run_single(
         late_tasks=plan.late_tasks,
         travel_km=plan.total_travel_km,
         operating_cost=plan.total_operating_cost,
-        violations=len(plan.hard_violations),
+        violations=sum(1 for v in plan.violations if v.severity >= 1),
         model_variables=max((r.num_variables for r in plan.solver_runs), default=0),
         model_constraints=max((r.num_constraints for r in plan.solver_runs), default=0),
         optimality_gap=_gap(plan),
@@ -166,7 +209,7 @@ def run_scalability(
 
     for level in SCALABILITY_LEVELS:
         sc_cfg = difficulty_config(level, seed=cfg.seed, maintenance_count=cfg.scenario.maintenance_count)
-        scenario = generate(sc_cfg, weights=cfg.weights())
+        scenario = generate(sc_cfg)
         split = SYNTHETIC_SPLIT[level]
         for solver in cfg.solver_names():
             for budget in cfg.time_budgets:
@@ -221,7 +264,7 @@ def run_time_budget(
 ) -> dict[str, Any]:
     """How much quality is lost as the time cap tightens."""
     sc_cfg = difficulty_config(cfg.scenario.level, seed=cfg.seed, maintenance_count=cfg.scenario.maintenance_count)
-    scenario = generate(sc_cfg, weights=cfg.weights())
+    scenario = generate(sc_cfg)
     budgets = (1.0, 5.0, 10.0, 30.0, 60.0)
     rows: list[dict[str, Any]] = []
     failures: list[FailureRecord] = []
@@ -273,10 +316,10 @@ def run_constraint_pressure(
                 cfg.scenario.level,
                 seed=cfg.seed,
                 maintenance_count=cfg.scenario.maintenance_count,
-                scarcity=scarcity,
+                resource_scarcity=scarcity,
                 deadline_tightness=tightness,
             )
-            scenario = generate(sc_cfg, weights=cfg.weights())
+            scenario = generate(sc_cfg)
             solver = cfg.solver_names()[0]
             plan, records, run = run_single(
                 scenario, solver, cfg.time_budgets[0],
@@ -307,6 +350,34 @@ STRESS_SEVERITIES = ("low", "medium", "high")
 STRESS_STRATEGIES = ("none", "local_repair", "full_reopt")
 
 
+def recovery_fraction(baseline: float, degraded: float, recovered: float) -> float | None:
+    """Share of the lost service a recovery strategy gave back.
+
+    ``(recovered - degraded) / (baseline - degraded)``. Returns ``None`` when the
+    disruption cost no measurable service, because the fraction is then
+    undefined - reporting 0.0 or 100.0 there would be an invention.
+    """
+    lost = baseline - degraded
+    if lost <= 1e-9:
+        return None
+    return round(max(0.0, min(1.0, (recovered - degraded) / lost)), 6)
+
+
+def _spread_sample(items: Sequence[Any], *, limit: int) -> list[Any]:
+    """Take up to *limit* items, spread evenly across the sequence.
+
+    Deterministic (the input is sorted first) and order-independent, so raising
+    the rate genuinely increases coverage instead of only reordering the sample.
+    """
+    ordered = sorted(items, key=lambda d: getattr(d, "id", str(d)))
+    if limit <= 0 or len(ordered) <= limit:
+        return list(ordered)
+    if limit == 1:
+        return [ordered[len(ordered) // 2]]
+    step = (len(ordered) - 1) / (limit - 1)
+    return [ordered[round(i * step)] for i in range(limit)]
+
+
 def run_disruption_stress(
     cfg: ExperimentConfig,
     store: ExperimentStore,
@@ -324,7 +395,7 @@ def run_disruption_stress(
     for rate in STRESS_RATES:
         for severity in STRESS_SEVERITIES:
             sc_cfg = difficulty_config("medium", seed=cfg.seed, maintenance_count=cfg.scenario.maintenance_count)
-            scenario = generate(sc_cfg, weights=cfg.weights())
+            scenario = generate(sc_cfg)
             solver_name = cfg.solvers[0]
             planner = Planner(
                 default_solver=solver_name,
@@ -341,21 +412,32 @@ def run_disruption_stress(
             replanner = Replanner(
                 solver=solver_name, time_budget_s=cfg.time_budgets[0], seed=cfg.seed
             )
-            for disruption in disruptions[:2]:  # bounded: keep the suite tractable
+            # Bounded, but bounded *per rate* rather than by a flat slice. An
+            # earlier `disruptions[:2]` truncated whatever the generator happened
+            # to emit first, so raising the disruption rate changed which
+            # disruptions were sampled rather than how many were applied - the
+            # measured recovery was flat across 5% and 30%. The sample is now
+            # deterministic (sorted by id) and spread across the whole list.
+            sample = _spread_sample(disruptions, limit=cfg.disruption.sample_per_rate)
+            for disruption in sample:
                 out = replanner.replan(scenario, baseline, disruption)
                 if out.repair.plan is None and out.full is None:
                     continue
+                # ReplanOutcome does not carry a "do nothing" plan; the degraded
+                # state is derived from the impact, exactly as the demo and the
+                # API do, so the suite measures the same baseline->degraded delta.
+                degraded_plan = degraded_plan_from(scenario, baseline, out.impact)
                 report = build_recovery_report(
                     disruption_id=out.disruption.id,
                     baseline=baseline,
-                    degraded=out.degraded,
+                    degraded=degraded_plan,
                     repaired=out.repair.plan if out.repair.plan is not None else out.full,
                     full=out.full,
                     repair_seconds=out.repair.seconds,
                     full_seconds=out.full_seconds,
                 )
                 for strategy, plan, seconds in (
-                    ("none", out.degraded, 0.0),
+                    ("none", degraded_plan, 0.0),
                     ("local_repair", out.repair.plan, out.repair.seconds),
                     ("full_reopt", out.full, out.full_seconds),
                 ):
@@ -367,15 +449,40 @@ def run_disruption_stress(
                         "strategy": strategy,
                         "disruption_id": disruption.id,
                         "service_level": plan.service_level,
-                        "recovered_pct": report.recovery_pct,
-                        "replan_seconds": seconds,
-                        "churn_fraction": (
-                            (compute_churn(baseline, plan).changed_assignments
-                             / max(1, compute_churn(baseline, plan).total_before))
-                            if strategy != "none" else None
-                        ),
-                        "violations": len(plan.hard_violations),
                         "objective": plan.objective.total,
+                        "late_tasks": plan.late_tasks,
+                        "tasks_assigned": plan.tasks_assigned,
+                        "travel_km": plan.total_travel_km,
+                        "operating_cost": plan.total_operating_cost,
+                        "violations": sum(1 for v in plan.violations if v.severity >= 1),
+                        "replan_seconds": seconds,
+                        # Recovery is measured per strategy against that
+                        # strategy's own service level, using the same
+                        # baseline -> degraded -> recovered definition the report
+                        # uses. `none` is by construction 0% recovery.
+                        "recovery_pct": recovery_fraction(
+                            report.baseline_service,
+                            report.degraded_service,
+                            plan.service_level,
+                        ),
+                        "baseline_service": report.baseline_service,
+                        "degraded_service": report.degraded_service,
+                        "churn_changed": (
+                            None if strategy == "none"
+                            else compute_churn(baseline, plan).changed_assignments
+                        ),
+                        "churn_total_before": (
+                            None if strategy == "none"
+                            else compute_churn(baseline, plan).total_before
+                        ),
+                        "churn_fraction": (
+                            None if strategy == "none"
+                            else round(
+                                compute_churn(baseline, plan).changed_assignments
+                                / max(1, compute_churn(baseline, plan).total_before),
+                                6,
+                            )
+                        ),
                     })
                 if out.full is not None:
                     failures.extend(
@@ -472,17 +579,86 @@ def run_experiment(
         dataset_checksums=checksums,
         splits=dict(SYNTHETIC_SPLIT),
     )
+    started = time.perf_counter()
     try:
         outcome = SUITES[suite](cfg, store, manifest, directory)
     except Exception as exc:  # noqa: BLE001 - record the failure, then re-raise
-        store.finish(directory, status="failed", summary={"error": str(exc), "type": type(exc).__name__})
+        store.finish(
+            directory,
+            status="failed",
+            summary={"error": str(exc), "type": type(exc).__name__, "rows": 0},
+        )
         raise
-    status = "succeeded" if outcome.get("rows") else "empty"
+    wall = time.perf_counter() - started
+
+    # Every suite records real wall-clock. An empty timings.json reads like an
+    # experiment that measured nothing, so the harness always fills in what it
+    # can know; a suite that does its own stage timing keeps its numbers.
+    rows = list(outcome.get("rows", []))
+    timings: dict[str, Any] = dict(outcome.get("timings") or {})
+    timings.setdefault("suite_wall_seconds", round(wall, 4))
+    solver_seconds = sum(
+        float(r.get("runtime_s") or 0.0)
+        for r in rows
+        if isinstance(r, dict) and r.get("runtime_s") is not None
+    )
+    if solver_seconds and wall:
+        timings.setdefault("solver_seconds", round(solver_seconds, 4))
+        timings.setdefault("solver_fraction_of_wall", round(solver_seconds / wall, 4))
+    timings.setdefault("rows", len(rows))
+
+    summary = summarise(outcome, rows, suite=suite, wall_seconds=wall)
     store.write_artifacts(
         directory,
-        metrics={k: v for k, v in outcome.items() if k != "timings"},
-        timings=outcome.get("timings", {}),
-        tables={"results": outcome.get("rows", [])},
+        metrics={k: v for k, v in outcome.items() if k not in ("timings", "rows")},
+        timings=timings,
+        tables={"results": rows},
     )
-    store.finish(directory, status=status, summary={"rows": len(outcome.get("rows", []))})
+    store.finish(directory, status="succeeded" if rows else "empty", summary=summary)
     return manifest, directory, outcome
+
+
+def summarise(outcome: dict[str, Any], rows: list[Any], *, suite: str, wall_seconds: float) -> dict[str, Any]:
+    """A small, always-populated summary of what an experiment actually found.
+
+    Derived from the rows rather than hand-written, so a suite cannot claim a
+    result it did not measure. The status breakdown is included on purpose:
+    "three of sixteen runs hit the time limit" is a finding, not a footnote.
+    """
+    summary: dict[str, Any] = {"suite": suite, "rows": len(rows), "wall_seconds": round(wall_seconds, 4)}
+    for key in ("findings", "notes", "transitions", "recommendations"):
+        if outcome.get(key):
+            summary[key] = outcome[key]
+    if not rows:
+        return summary
+
+    def column(name: str) -> list[Any]:
+        return [r.get(name) for r in rows if isinstance(r, dict) and r.get(name) is not None]
+
+    statuses = column("status")
+    if statuses:
+        counts: dict[str, int] = {}
+        for value in statuses:
+            counts[str(value)] = counts.get(str(value), 0) + 1
+        summary["status_counts"] = dict(sorted(counts.items()))
+
+    for name in ("objective", "runtime_s", "service_level", "late_tasks", "travel_km", "violations"):
+        values = [float(v) for v in column(name) if isinstance(v, (int, float))]
+        if values:
+            summary.setdefault("numeric", {})[name] = {
+                "min": min(values),
+                "median": statistics.median(values),
+                "max": max(values),
+                "mean": round(statistics.fmean(values), 6),
+                "n": len(values),
+            }
+
+    failures = outcome.get("failures")
+    if isinstance(failures, list) and failures:
+        categories: dict[str, int] = {}
+        for record in failures:
+            key = str(record.get("category") if isinstance(record, dict) else getattr(record, "category", "UNKNOWN"))
+            categories[key] = categories.get(key, 0) + 1
+        summary["failure_records"] = len(failures)
+        summary["failure_categories"] = dict(sorted(categories.items()))
+    return summary

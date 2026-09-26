@@ -56,6 +56,44 @@ def severity_params(severity: str) -> tuple[float, float, int]:
         ) from None
 
 
+def _surge_task_specs(
+    scenario: Any, *, count: int, when: int, rng: random.Random, index: int
+) -> list[NewTaskSpec]:
+    """Build the concrete tasks a demand surge introduces.
+
+    The specs are drawn from the scenario's own locations and capabilities, and
+    given a deadline that leaves real room inside the horizon, so applying the
+    surge produces a scenario the planner can actually work with instead of an
+    immediately-infeasible one.
+    """
+    from orion.domain.events import NewTaskSpec
+
+    locations = [loc for loc in scenario.travel.locations if loc != scenario.depot]
+    if not locations:
+        return []
+    capabilities = sorted({cap for task in scenario.tasks for cap in task.required_capabilities})
+    duration = 30
+    window = max(60, scenario.horizon.end - when)
+    specs: list[NewTaskSpec] = []
+    for offset in range(count):
+        location = rng.choice(locations)
+        needed = tuple(rng.sample(capabilities, k=min(2, len(capabilities)))) if capabilities else ()
+        specs.append(
+            NewTaskSpec(
+                task_id=f"{scenario.id}-SURGE{index + 1:02d}-{offset + 1:02d}",
+                location=location,
+                release_time=when,
+                # Deadline is a fraction of the remaining window so the task is
+                # urgent but not already impossible when it lands.
+                deadline=when + max(90, int(window * 0.6)),
+                duration=duration,
+                priority=4,  # CRITICAL
+                required_capabilities=needed,
+            )
+        )
+    return specs
+
+
 def generate_disruptions(
     scenario: Scenario,
     *,
@@ -82,8 +120,17 @@ def generate_disruptions(
     resources = list(scenario.resources)
     if not resources:
         return ()
-    count = max(1, round(len(resources) * rate * multiplier / 2))
+    # `rate` is the fraction of *resources* hit, and it must actually change the
+    # number of disruptions. The previous formula divided by 2 and rounded, so
+    # with 8 resources a 5% and a 10% sweep both produced 1 disruption and 20%
+    # and 30% both produced 2 - the rate axis of the experiment was flat. Rounding
+    # to nearest is kept, but the divisor is gone and a floor of 1 applies only
+    # above a zero rate (a 0% sweep must still produce nothing).
+    count = int(round(len(resources) * rate * multiplier))
+    count = max(1, count) if rate > 0 else 0
     count = min(count, len(resources))
+    if count == 0:
+        return ()
     chosen = rng.sample(resources, count)
 
     earliest = scenario.horizon.start + int((scenario.horizon.end - scenario.horizon.start) * horizon_fraction)
@@ -95,19 +142,26 @@ def generate_disruptions(
         when = earliest + rng.randrange(0, max(1, scenario.horizon.end - earliest))
         if kind == "DEMAND_SURGE":
             new_tasks = max(1, round(len(scenario.tasks) * 0.2 * multiplier))
+            # Emit a real DEMAND_SURGE carrying NewTaskSpec payloads, the same
+            # contract the domain's own handler consumes. An earlier version
+            # emitted NEW_URGENT_TASK with a bare {"count": n} payload, which the
+            # domain correctly rejects: a surge is several concrete tasks, and
+            # inventing a placeholder spec here would mean the disruption could
+            # not actually be applied.
+            specs = _surge_task_specs(scenario, count=new_tasks, when=when, rng=rng, index=index)
             out.append(
                 Disruption(
                     id=f"{scenario.id}-D{index + 1:02d}",
-                    type="NEW_TASK",
+                    type="DEMAND_SURGE",
                     timestamp=when,
                     magnitude=float(new_tasks),
                     duration=None,
                     description=(
-                        f"{new_tasks} new urgent task(s) arrive at "
+                        f"{len(specs)} new urgent task(s) arrive at "
                         f"{when // 60:02d}:{when % 60:02d}"
                     ),
                     severity=severity.upper(),
-                    payload={"count": new_tasks, "priority": "HIGH", "kind": kind},
+                    payload={"tasks": [spec.to_dict() for spec in specs]},
                 )
             )
             continue
@@ -115,7 +169,7 @@ def generate_disruptions(
             out.append(
                 Disruption(
                     id=f"{scenario.id}-D{index + 1:02d}",
-                    type="TRAVEL_INCREASE",
+                    type="TRAVEL_TIME_INCREASE",
                     timestamp=when,
                     target_id=None,
                     magnitude=1.0 + deadline_inflation * 2,
@@ -136,7 +190,7 @@ def generate_disruptions(
             out.append(
                 Disruption(
                     id=f"{scenario.id}-D{index + 1:02d}",
-                    type="MAINTENANCE",
+                    type="MAINTENANCE_EVENT",
                     timestamp=when,
                     target_id=resource.id,
                     magnitude=1.0,
@@ -161,7 +215,7 @@ def generate_disruptions(
                     magnitude=1.0,
                     duration=None,
                     description=(
-                        f"{resource.id} ({resource.kind.value}) is unavailable from "
+                        f"{resource.id} ({resource.kind}) is unavailable from "
                         f"{when // 60:02d}:{when % 60:02d} onward"
                     ),
                     severity=severity.upper(),
@@ -185,7 +239,7 @@ def generate_disruptions(
                     f"of service for {max(1, min(duration, scenario.horizon.end - when))} min"
                 ),
                 severity=severity.upper(),
-                payload={"kind": kind, "resource_kind": resource.kind.value},
+                payload={"kind": kind, "resource_kind": str(resource.kind)},
             )
         )
     return tuple(out)

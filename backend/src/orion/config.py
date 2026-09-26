@@ -97,7 +97,21 @@ class DisruptionConfig:
     rate: float = 0.0
     severity: str = "medium"
     seed: int = 7
-    kinds: tuple[str, ...] = ("VEHICLE_FAILURE", "RESOURCE_UNAVAILABLE", "MAINTENANCE")
+    #: Generator-local labels, deliberately the five kinds the stress suite
+    #: sweeps. These are mapped onto the domain's DisruptionType vocabulary by
+    #: `orion.simulation.disruptions`, which is the only place that knows both.
+    kinds: tuple[str, ...] = (
+        "VEHICLE_FAILURE",
+        "RESOURCE_UNAVAILABLE",
+        "MAINTENANCE",
+        "DEMAND_SURGE",
+        "TRAVEL_INCREASE",
+    )
+    #: How many disruptions of each generated set are actually applied. The
+    #: suite applies a deterministic, evenly-spread sample rather than a flat
+    #: prefix slice, so raising `rate` increases coverage instead of only
+    #: reordering which disruptions get measured.
+    sample_per_rate: int = 4
 
     def validate(self) -> None:
         if not 0.0 <= self.rate <= 1.0:
@@ -108,6 +122,10 @@ class DisruptionConfig:
             )
         if not self.kinds:
             raise ConfigError("disruption.kinds must not be empty")
+        if self.sample_per_rate < 1:
+            raise ConfigError(
+                f"disruption.sample_per_rate must be >= 1, got {self.sample_per_rate}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -115,6 +133,7 @@ class DisruptionConfig:
             "severity": self.severity,
             "seed": self.seed,
             "kinds": list(self.kinds),
+            "sample_per_rate": self.sample_per_rate,
         }
 
 

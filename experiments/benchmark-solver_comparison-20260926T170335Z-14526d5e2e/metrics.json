@@ -1,0 +1,43 @@
+{
+  "failures": {
+    "solver_timeout": {
+      "count": 6,
+      "worst_severity": 1,
+      "representative": {
+        "category": "solver_timeout",
+        "scenario": "solomon:C101",
+        "detail": "no proven optimum within 5.0s",
+        "root_cause": "model size above the budget the planner allowed",
+        "consequence": "quality is unknown, not optimal",
+        "mitigation": "raise the time budget, or accept the FEASIBLE plan and raise a follow-up",
+        "severity": 1
+      }
+    },
+    "deadline_collapse": {
+      "count": 5,
+      "worst_severity": 2,
+      "representative": {
+        "category": "deadline_collapse",
+        "scenario": "solomon:C101",
+        "detail": "3/4 dispatched tasks are late",
+        "root_cause": "deadline slack too small relative to travel and duration",
+        "consequence": "service level collapses; the plan is technically feasible but useless",
+        "mitigation": "widen w_late or the time windows before trusting the plan",
+        "severity": 2
+      }
+    },
+    "trivial_problem": {
+      "count": 1,
+      "worst_severity": 1,
+      "representative": {
+        "category": "trivial_problem",
+        "scenario": "jobshop-ft10",
+        "detail": "could not load jobshop-ft10: invalid literal for int() with base 10: 'file'",
+        "root_cause": "benchmark download or parse failure",
+        "consequence": "instance excluded from the comparison",
+        "mitigation": "check data/PROVENANCE.md and the network path",
+        "severity": 1
+      }
+    }
+  }
+}

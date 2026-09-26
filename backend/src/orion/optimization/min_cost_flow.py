@@ -111,15 +111,39 @@ def build_flow_network(
         "task_resource_arcs": [],
     }
 
-    # A min-cost flow needs balanced supplies: +|T| at the source and -|T| at
-    # the sink. Each task unit then flows source -> task -> resource -> sink, and
-    # a task that is not worth serving simply does not flow (the source->task arc
-    # carries the negative value as its cost, so serving a low-value task is only
-    # chosen when nothing better is available).
-    smf.set_node_supply(source, len(tasks))
-    smf.set_node_supply(sink, -len(tasks))
+    # A min-cost flow needs balanced supplies. Each task unit then flows
+    # source -> task -> resource -> sink.
+    #
+    # A task that *no* resource can serve (a capability combination nobody
+    # holds) has no outgoing arc, so demanding a unit for it made the whole
+    # network infeasible. That is a modelling error, not a property of the
+    # instance: a plan is allowed to leave such a task unassigned. So the supply
+    # counts only tasks with at least one eligible resource, and a zero-cost
+    # bypass arc carries the difference.
+    servable = [
+        index
+        for index, task in enumerate(tasks)
+        if any(
+            context.pair(task.id, resource.id) is not None for resource in resources
+        )
+    ]
+    servable_set = set(servable)
+    smf.set_node_supply(source, len(servable))
+    smf.set_node_supply(sink, -len(servable))
+    if len(servable) < len(tasks):
+        # Bypass: lets the solver satisfy the supply without forcing every task
+        # to be served. Cost 0 so it is only used when nothing else is possible,
+        # which matches "unservable tasks are simply left unassigned".
+        smf.add_arc_with_capacity_and_unit_cost(
+            source, sink, len(tasks) - len(servable), 0
+        )
+    handles["unservable_tasks"] = tuple(
+        tasks[index].id for index in range(len(tasks)) if index not in servable_set
+    )
 
     for index, task in enumerate(tasks):
+        if index not in servable_set:
+            continue  # no eligible resource: the node is deliberately left isolated
         task_node = task_base + index
         value = task_value(task, context.scenario.objective_weights).total
         # reward for serving this task: a negative arc cost from the source
@@ -165,7 +189,6 @@ def solve_flow(
     # The OR-Tools min-cost flow solver is a single-shot exact algorithm with no
     # time-limit parameter in this build, so the caller's budget cannot bound it.
     # The limitation is recorded in the run notes rather than hidden.
-    smf.solve()
     tasks = context.tasks
     resources = [
         r for r in context.resources if context.resource_pairs.get(r.id)
@@ -174,14 +197,22 @@ def solve_flow(
     resource_base = handles["resource_base"]  # type: ignore[index]
 
     allocation: dict[str, list[str]] = {r.id: [] for r in resources}
+    # Solve exactly once. An earlier version called `smf.solve()` here and then
+    # again a few lines below; the second call re-ran the optimisation, so the
+    # status being inspected was not the status of the allocation being read.
     status = smf.solve()
     if status not in (
         min_cost_flow.SimpleMinCostFlow.OPTIMAL,
         min_cost_flow.SimpleMinCostFlow.FEASIBLE,
     ):
+        # `Status.name` is a property on the OR-Tools 9.15 enum, not a method;
+        # calling it raised `TypeError: 'property' object is not callable` and
+        # that TypeError propagated out of the solver instead of being reported
+        # as a solver status. `str(status)` is the portable spelling.
         raise RuntimeError(
-            f"min-cost flow did not solve: status="
-            f"{min_cost_flow.SimpleMinCostFlow.Status.name(status)}"
+            "min-cost flow did not solve: "
+            f"status={getattr(status, 'name', status)!r} "
+            f"(optimal_cost={smf.optimal_cost()!r})"
         )
     for t_index, r_index, arc in handles["task_resource_arcs"]:  # type: ignore[union-attr]
         if smf.flow(arc) > 0:

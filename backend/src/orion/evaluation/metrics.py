@@ -195,6 +195,19 @@ class FailureCategory(str, Enum):
     MISLEADING_OBJECTIVE = "misleading_objective"
     TRIVIAL_PROBLEM = "trivial_problem"
 
+    #: The solver raised and produced no plan. Distinct from every other
+    #: category because the row is not a *bad* result, it is the *absence* of
+    #: one, and it must never be averaged into a quality table.
+    SOLVER_ERROR = "solver_error"
+    #: The solver reported success but its plan violates a hard constraint, or
+    #: is empty when the instance demonstrably admits work. The silent-empty-plan
+    #: case is why this category exists: it is a success status wrapping a
+    #: failure.
+    SOLUTION_INVALID = "solution_invalid"
+    #: A scenario for which no resource can serve any task. Legitimate, and
+    #: distinct from SOLVER_ERROR: the solver is correct, the instance is not.
+    NO_ELIGIBLE_PAIR = "no_eligible_pair"
+
 
 @dataclass(slots=True)
 class FailureRecord:
@@ -239,8 +252,14 @@ def detect_failures(
     out: list[FailureRecord] = []
     name = scenario.name
     n = len(scenario.tasks)
+    # A plan records the solver inside `solver_runs`, not as its own attributes;
+    # an ad-hoc plan can carry none at all, so both reads are guarded rather
+    # than assumed.
+    last_run = plan.solver_runs[-1] if plan.solver_runs else None
+    solver_name = last_run.solver if last_run else plan.strategy
+    solver_runtime = last_run.runtime_s if last_run else 0.0
 
-    if plan.status.value == "INFEASIBLE":
+    if plan.status == "INFEASIBLE":
         out.append(
             FailureRecord(
                 FailureCategory.INFEASIBLE_SCENARIO,
@@ -252,12 +271,12 @@ def detect_failures(
                 severity=3,
             )
         )
-    if plan.status.value == "TIME_LIMIT":
+    if plan.status == "TIME_LIMIT":
         out.append(
             FailureRecord(
                 FailureCategory.SOLVER_TIMEOUT,
                 name,
-                f"no proven optimum within {plan.solver_runtime:.1f}s",
+                f"no proven optimum within {solver_runtime:.1f}s",
                 root_cause="model size above the budget the planner allowed",
                 consequence="quality is unknown, not optimal",
                 mitigation="raise the time budget, or accept the FEASIBLE plan and raise a follow-up",
@@ -276,7 +295,7 @@ def detect_failures(
                 severity=2,
             )
         )
-    if reference_gap is not None and reference_gap > 0.05 and plan.solver_name is SolverName.HEURISTIC:
+    if reference_gap is not None and reference_gap > 0.05 and solver_name == SolverName.HEURISTIC:
         out.append(
             FailureRecord(
                 FailureCategory.HEURISTIC_QUALITY_GAP,
