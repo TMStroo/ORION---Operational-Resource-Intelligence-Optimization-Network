@@ -508,19 +508,34 @@ def materialise_sequences(
         )
         prepared[resource_id] = order_within_resource(ordered, context)
 
-    bounds = dependency_bounds(context, prepared)
+    # Dependency bounds are recomputed after every truncation. Computing them once
+    # up front was subtly wrong: when a resource's sequence fails and its last task
+    # is dropped, that task's lower bound disappears for every *other* resource,
+    # which is free to start before it. That produced an intermittent precedence
+    # violation on the 250-task stress scenario - T-182 starting at 652 while its
+    # prerequisite T-053 finished at 655 - on roughly one run in two, depending on
+    # which sequences happened to be truncated. A dropped task must be treated as
+    # unscheduled, which is what recomputing expresses.
+    remaining = {rid: list(seq) for rid, seq in prepared.items()}
     out: list[Assignment] = []
     for resource_id in sorted(prepared):
-        sequence = list(prepared[resource_id])
+        sequence = remaining.get(resource_id) or []
         if not sequence:
             continue
         result = schedule_sequence(
-            sequence, context, resource_id, external_bounds=bounds
+            sequence,
+            context,
+            resource_id,
+            external_bounds=dependency_bounds(context, remaining),
         )
         while result is None and sequence:
             sequence = sequence[:-1]
+            remaining[resource_id] = sequence
             result = schedule_sequence(
-                sequence, context, resource_id, external_bounds=bounds
+                sequence,
+                context,
+                resource_id,
+                external_bounds=dependency_bounds(context, remaining),
             )
         if result:
             out.extend(result)

@@ -122,6 +122,23 @@ def run_single(
     # precedence) produces an empty plan whose status reads FEASIBLE, which put
     # a "0.00 objective, FEASIBLE" row into the 250-task table. A run that
     # produced no solution must say so.
+    # A plan with no recorded solver run at all is the worst case of the failure
+    # this guard exists for: the heuristic aborted on an IndexError at 250 tasks,
+    # the planner returned an empty plan, and the row went in as FEASIBLE with
+    # objective 0.0 and zero runtime. There is no result to report.
+    if not plan.solver_runs:
+        return plan, [
+            FailureRecord(
+                FailureCategory.SOLVER_ERROR,
+                scenario.name,
+                f"solver {solver} produced no recorded run for this scenario",
+                root_cause=(
+                    "the solver raised before returning a result and the planner "
+                    "returned an empty plan without recording the failure"
+                ),
+            )
+        ]
+
     declined = [r for r in plan.solver_runs if r.status == SolverStatus.NOT_APPLICABLE]
     if declined:
         return plan, [
@@ -241,6 +258,20 @@ def make_record(**kw: Any) -> RunRecord:  # small helper for readability
 #: demand-to-capacity ratio roughly constant, so a growth curve reflects size
 #: rather than a steadily worsening ratio.
 SCALABILITY_LEVELS = ("small", "medium", "large", "stress")
+# Statuses whose plan is a real, validated schedule and may therefore be ranked
+# against other rows. TIME_LIMIT counts: a solver that hit its budget but returned
+# a valid plan has still produced a usable schedule, and hiding it would hide the
+# time/quality trade-off this suite exists to measure. ERROR, INFEASIBLE and
+# NOT_APPLICABLE do not, and neither does a row that produced failure records.
+_COMPARABLE_STATUSES = frozenset(
+    {
+        SolverStatus.OPTIMAL,
+        SolverStatus.FEASIBLE,
+        SolverStatus.TIME_LIMIT,
+        SolverStatus.RELAXATION_OPTIMAL,
+    }
+)
+
 SCALABILITY_TASK_COUNTS = (10, 25, 50, 100, 250)
 
 #: Resource count per task count. Kept explicit instead of derived so the
@@ -265,7 +296,7 @@ def run_scalability(
     timer = ExperimentTimer()
     results: list[dict[str, Any]] = []
     failures: list[FailureRecord] = []
-    best_by_size: dict[int, float] = {}
+    best_by_size: dict[tuple[int, float], float] = {}
 
     for num_tasks in SCALABILITY_TASK_COUNTS:
         resources = SCALABILITY_RESOURCES.get(num_tasks, max(3, num_tasks // 9))
@@ -304,15 +335,43 @@ def run_scalability(
                     "split": split,
                 })
                 failures.extend(records)
-                # best achievable score at this size, for gap-vs-best
-                best_by_size[num_tasks] = max(
-                    best_by_size.get(num_tasks, -1e18), plan.objective.total
-                )
+                # Best achievable score at this size, for gap-vs-best. Only rows
+                # that actually produced a valid plan may define it. An ERROR row
+                # (CP-SAT at 250 tasks returned 115 assignments that then failed
+                # materialisation validation) carried objective 1414.27, became the
+                # reference, and gave every other row at that size a gap of 0.6-1.0
+                # against a plan that was never valid.
+                # NB: deliberately not gated on `records` being empty.
+                # `detect_failures` emits a SOLVER_TIMEOUT record for every
+                # TIME_LIMIT run, so gating on that excluded exactly the rows a
+                # time-budget suite exists to compare: LOCAL_SEARCH at 100 tasks /
+                # 5s returned a valid 61-task plan but was denied the reference,
+                # leaving HEURISTIC's lower score as "best" and producing a
+                # negative gap of -0.0104. Status and a real plan are the signals;
+                # failure records are advisory, not disqualifying.
+                if run.status in _COMPARABLE_STATUSES and (plan.assignments or not plan.late_tasks):
+                    key = (num_tasks, budget)
+                    best_by_size[key] = max(
+                        best_by_size.get(key, -1e18), plan.objective.total
+                    )
     for row in results:
-        best = best_by_size.get(row["task_count"])
+        # The reference must be the best result *at the same time budget*. Keying
+        # the best only on problem size let a 30s result become the yardstick for
+        # the 5s rows at the same size, which reported CP-SAT at 5s as 1.000
+        # (worse than a plan it never produced) and the 30s row as -0.0096, a
+        # negative gap that is arithmetically impossible for a maximum.
+        best = best_by_size.get((row["task_count"], row["time_budget_s"]))
         row["gap_to_best"] = (
             (best - row["objective"]) / abs(best) if best not in (None, 0) else None
         )
+        if row["status"] not in _COMPARABLE_STATUSES:
+            # A row with no valid plan has no objective to compare; reporting its
+            # arithmetic gap against someone else's best invites reading it as a
+            # measured quality figure.
+            row["gap_to_best"] = None
+            row["comparable"] = False
+        else:
+            row["comparable"] = best is not None
     return {
         "rows": results,
         "timings": timer.to_dict(),

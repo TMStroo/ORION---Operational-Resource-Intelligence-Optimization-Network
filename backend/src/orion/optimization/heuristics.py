@@ -128,22 +128,22 @@ def _insertion_options(
                             blocked = True
                             break
                     else:
-                        finish = min(
-                            (
-                                schedule_sequence(
-                                    other_seq, context, where, external_bounds=external
-                                )
-                                or []
-                            )[-1].end
-                            for other_seq in [sequences[where]]
+                        # The prerequisite's resource must be scheduled for its
+                        # finish time to exist. `schedule_sequence` returns None when
+                        # a resource's own sequence cannot be laid out, and indexing
+                        # `[-1]` of that raised IndexError - which aborted the whole
+                        # heuristic and left the 250-task rows reading FEASIBLE with
+                        # no assignments and no recorded solver run.
+                        placed = schedule_sequence(
+                            sequences[where], context, where, external_bounds=external
                         )
-                        earliest = min(
-                            a.start
-                            for a in schedule_sequence(
-                                current[:position] + [task_id], context, resource_id
-                            )
-                            or []
+                        trial = schedule_sequence(
+                            current[:position] + [task_id], context, resource_id
                         )
+                        if not placed or not trial:
+                            continue
+                        finish = max(a.end for a in placed)
+                        earliest = min(a.start for a in trial)
                         if earliest < finish:
                             blocked = True
                             break
