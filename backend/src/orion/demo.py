@@ -24,6 +24,7 @@ integration test rather than merely claimed here.
 
 from __future__ import annotations
 
+import csv
 import json
 import time
 from dataclasses import dataclass, field
@@ -82,6 +83,7 @@ class DemoSummary:
     affected_tasks: int = 0
     surge_recovered: int = 0
     whatif_delta: float = 0.0
+    whatif_rows: tuple[dict[str, object], ...] = ()
     artifacts: tuple[str, ...] = ()
 
     def highlights(self) -> list[str]:
@@ -115,6 +117,7 @@ class DemoSummary:
             "affected_tasks": self.affected_tasks,
             "surge_recovered": self.surge_recovered,
             "whatif_delta": self.whatif_delta,
+        "whatif_rows": [dict(r) for r in self.whatif_rows],
             "artifacts": list(self.artifacts),
             "stages": [
                 {"number": s.number, "title": s.title, "facts": list(s.facts), "seconds": s.seconds}
@@ -352,18 +355,60 @@ def run_demo(
 
     # ---- 8. what-if ------------------------------------------------------
     t0 = time.perf_counter()
+    # Every what-if operator the engine supports is run, not one representative.
+    # A single case cannot show which assumptions the plan is actually sensitive
+    # to, and a report claiming a what-if analysis on the strength of one
+    # scenario is not an analysis.
     whatif = WhatIfEngine(planner)
-    wi = whatif.run(scenario, baseline, "deadline_tighten", 0.15)
-    score_delta = wi.scenario_plan.objective.total - wi.baseline_plan.objective.total
+    outage_target = next(
+        (r.id for r in scenario.resources if r.kind == "vehicle"),
+        scenario.resources[0].id if scenario.resources else "",
+    )
+    whatif_cases: list[tuple[str, object]] = [
+        ("capacity_reduction", 0.80),      # capacity -20%
+        ("demand_increase", 0.30),        # demand +30%
+        ("deadline_tighten", 0.15),       # deadline slack -15%
+        ("resource_outage", outage_target),  # one named resource gone
+        ("travel_increase", 1.25),        # travel +25%
+        ("availability_drop", 0.20),      # availability -20%
+    ]
+    baseline_objective = baseline.objective.total
+    whatif_rows: list[dict[str, object]] = []
+    whatif_facts: list[str] = []
+    primary_delta = 0.0
+    for operator, parameter in whatif_cases:
+        wi = whatif.run(scenario, baseline, operator, parameter, seed=cfg.seed)
+        delta = wi.scenario_plan.objective.total - wi.baseline_plan.objective.total
+        if operator == "capacity_reduction":
+            primary_delta = delta
+        audit.record(
+            AuditAction.WHAT_IF_RUN, scenario.id, operator=wi.operator, parameter=wi.parameter
+        )
+        whatif_rows.append(
+            {
+                "operator": operator,
+                "parameter": wi.parameter,
+                "question": wi.question,
+                "modification": wi.modification,
+                "baseline": wi.baseline_plan.objective.total,
+                "scenario": wi.scenario_plan.objective.total,
+                "change": delta,
+                "assigned_before": len(wi.baseline_plan.assignments),
+                "assigned_after": len(wi.scenario_plan.assignments),
+                "late_before": wi.baseline_plan.late_tasks,
+                "late_after": wi.scenario_plan.late_tasks,
+            }
+        )
+        whatif_facts.append(
+            f"{operator:20s} {wi.baseline_plan.objective.total:8.2f} -> "
+            f"{wi.scenario_plan.objective.total:8.2f} ({delta:+7.2f})  "
+            f"assigned {len(wi.baseline_plan.assignments)}->{len(wi.scenario_plan.assignments)}  "
+            f"late {wi.baseline_plan.late_tasks}->{wi.scenario_plan.late_tasks}"
+        )
+    score_delta = primary_delta
     summary.whatif_delta = score_delta
-    audit.record(AuditAction.WHAT_IF_RUN, scenario.id, operator=wi.operator, parameter=wi.parameter)
-    top = wi.comparison.deltas[:4]
-    finish(8, "What-if: deadlines 15% tighter", [
-        wi.question,
-        f"modification: {wi.modification}",
-        f"baseline {wi.baseline_plan.objective.total:,.2f} -> scenario {wi.scenario_plan.objective.total:,.2f} ({score_delta:+,.2f})",
-        "; ".join(f"{d.label} {d.before:,.1f}->{d.after:,.1f}" for d in top),
-    ], t0)
+    summary.whatif_rows = tuple(whatif_rows)
+    finish(8, f"What-if: {len(whatif_cases)} operators, all re-solved", whatif_facts, t0)
 
     # ---- 9. artifacts ----------------------------------------------------
     t0 = time.perf_counter()
@@ -378,6 +423,25 @@ def run_demo(
         json.dumps(summary.to_dict(), indent=2, default=str), encoding="utf-8"
     )
     summary.artifacts = summary.artifacts + (str(out_dir / "demo_summary.json"),)
+
+    # The what-if table is exported so the report can plot and quote it without
+    # re-solving. Reading it back is cheaper than re-running the engine and it is
+    # the run that actually produced the published numbers.
+    if summary.whatif_rows:
+        whatif_csv = out_dir / "whatif_comparison.csv"
+        with whatif_csv.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "operator", "parameter", "question", "modification",
+                    "baseline", "scenario", "change", "assigned_before",
+                    "assigned_after", "late_before", "late_after",
+                ],
+            )
+            writer.writeheader()
+            for row in summary.whatif_rows:
+                writer.writerow({k: row.get(k, "") for k in writer.fieldnames})
+        summary.artifacts = summary.artifacts + (str(whatif_csv),)
 
     if figures:
         try:

@@ -1,0 +1,7 @@
+operator,parameter,question,modification,baseline,scenario,change,assigned_before,assigned_after,late_before,late_after
+capacity_reduction,0.8,What if resource capacity falls to 80%?,capacity of 14 resource(s) reduced to 80%,637.8492638093529,638.990162507573,1.1408986982200986,46,46,11,12
+demand_increase,0.3,What if demand rises by 30%?,added 18 new high-priority task(s),637.8492638093529,783.8029742837172,145.95371047436424,46,55,11,8
+deadline_tighten,0.15,What if deadlines become 15% tighter?,tightened 59/60 deadlines by 15% of their slack,637.8492638093529,638.0612412191853,0.21197740983234326,46,46,11,16
+resource_outage,T-001,What if T-001 becomes unavailable?,resource T-001 unavailable for the whole horizon,637.8492638093529,624.5408171194584,-13.308446689894481,46,45,11,10
+travel_increase,1.25,What if travel times increase by factor 1.25?,all travel times multiplied by 1.25,637.8492638093529,620.2997860016199,-17.54947780773307,46,45,11,14
+availability_drop,0.2,What if resource availability falls by 20%?,"removed 3 of 14 resources from service: T-004, T-005, V-014",637.8492638093529,574.620396185984,-63.228867623368956,46,42,11,12

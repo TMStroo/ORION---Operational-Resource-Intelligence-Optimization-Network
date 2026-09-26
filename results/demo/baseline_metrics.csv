@@ -1,18 +1,18 @@
-# provenance: {"export_schema": "orion.export/1", "git_commit": "8258d3c9545b8cf29b70551e193ce8ce859d5108", "kind": "metrics", "objective_weights": {"w_completion": 10.0, "w_cost": 0.01, "w_dispatch": 0.05, "w_late": 0.4, "w_move_idle": 0.02, "w_overload": 0.5, "w_priority": 2.0, "w_travel": 0.02, "w_violation": 50.0}, "platform": "Windows-11-10.0.26200-SP0", "python_version": "3.14.7", "seed": 2026, "source": "demo:SCN-orion-medium-2026"}
+# provenance: {"export_schema": "orion.export/1", "git_commit": "9afbef14df7c45ba402fc246414372ee9f123f92", "kind": "metrics", "objective_weights": {"w_completion": 10.0, "w_cost": 0.01, "w_dispatch": 0.05, "w_late": 0.4, "w_move_idle": 0.02, "w_overload": 0.5, "w_priority": 2.0, "w_travel": 0.02, "w_violation": 50.0}, "platform": "Windows-11-10.0.26200-SP0", "python_version": "3.14.7", "seed": 2026, "source": "demo:SCN-orion-large-2026"}
 key,label,value,unit,higher_is_better
-plan_score,Plan score,301.033743,,true
-service_level,Service level,0.889503,%,true
-task_completion_rate,Task completion rate,0.880000,%,true
-priority_weighted_completion,Priority-weighted completion,0.910714,%,true
-deadline_violation_rate,Deadline violation rate,0.318182,%,false
-mean_lateness,Mean lateness,10.409091,min,false
-max_lateness,Max lateness,55.000000,min,false
-travel_distance,Travel distance,384.978300,km,false
-operating_cost,Operating cost,865.745800,cost,false
-mean_utilisation,Mean utilisation,0.781567,%,true
-violations,Constraint violations,7.000000,,false
-tasks_assigned,Tasks assigned,22.000000,,true
-late_tasks,Late tasks,7.000000,,false
-solver_runtime,Solver runtime,0.366208,s,false
-model_variables,Model variables,171.000000,,false
+plan_score,Plan score,637.849264,,true
+service_level,Service level,0.793427,%,true
+task_completion_rate,Task completion rate,0.766667,%,true
+priority_weighted_completion,Priority-weighted completion,0.857143,%,true
+deadline_violation_rate,Deadline violation rate,0.239130,%,false
+mean_lateness,Mean lateness,7.282609,min,false
+max_lateness,Max lateness,74.000000,min,false
+travel_distance,Travel distance,683.281000,km,false
+operating_cost,Operating cost,1585.881700,cost,false
+mean_utilisation,Mean utilisation,0.805550,%,true
+violations,Constraint violations,11.000000,,false
+tasks_assigned,Tasks assigned,46.000000,,true
+late_tasks,Late tasks,11.000000,,false
+solver_runtime,Solver runtime,3.327519,s,false
+model_variables,Model variables,644.000000,,false
 model_constraints,Model constraints,5.000000,,false

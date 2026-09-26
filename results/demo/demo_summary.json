@@ -1,19 +1,99 @@
 {
-  "scenario_id": "SCN-orion-medium-2026",
+  "scenario_id": "SCN-orion-large-2026",
   "output_dir": "results\\demo",
-  "baseline_score": 301.03374326513534,
-  "baseline_service": 0.8895027624309392,
-  "degraded_score": 230.74464701131274,
-  "repaired_score": 285.86554277794386,
-  "full_score": 289.36308752529646,
-  "repair_seconds": 0.0062095999892335385,
-  "full_seconds": 0.35222800000337884,
-  "recovery_pct": 83.78378378378382,
-  "churn_changed": 5,
-  "churn_total": 22,
-  "affected_tasks": 5,
-  "surge_recovered": 3,
-  "whatif_delta": -0.08591720289695104,
+  "baseline_score": 637.8492638093529,
+  "baseline_service": 0.7934272300469484,
+  "degraded_score": 535.1846267723159,
+  "repaired_score": 629.2029435803325,
+  "full_score": 628.36743385095,
+  "repair_seconds": 0.09003120000124909,
+  "full_seconds": 5.024212899996201,
+  "recovery_pct": 92.45283018867923,
+  "churn_changed": 9,
+  "churn_total": 46,
+  "affected_tasks": 7,
+  "surge_recovered": 9,
+  "whatif_delta": 1.1408986982200986,
+  "whatif_rows": [
+    {
+      "operator": "capacity_reduction",
+      "parameter": 0.8,
+      "question": "What if resource capacity falls to 80%?",
+      "modification": "capacity of 14 resource(s) reduced to 80%",
+      "baseline": 637.8492638093529,
+      "scenario": 638.990162507573,
+      "change": 1.1408986982200986,
+      "assigned_before": 46,
+      "assigned_after": 46,
+      "late_before": 11,
+      "late_after": 12
+    },
+    {
+      "operator": "demand_increase",
+      "parameter": 0.3,
+      "question": "What if demand rises by 30%?",
+      "modification": "added 18 new high-priority task(s)",
+      "baseline": 637.8492638093529,
+      "scenario": 783.8029742837172,
+      "change": 145.95371047436424,
+      "assigned_before": 46,
+      "assigned_after": 55,
+      "late_before": 11,
+      "late_after": 8
+    },
+    {
+      "operator": "deadline_tighten",
+      "parameter": 0.15,
+      "question": "What if deadlines become 15% tighter?",
+      "modification": "tightened 59/60 deadlines by 15% of their slack",
+      "baseline": 637.8492638093529,
+      "scenario": 638.0612412191853,
+      "change": 0.21197740983234326,
+      "assigned_before": 46,
+      "assigned_after": 46,
+      "late_before": 11,
+      "late_after": 16
+    },
+    {
+      "operator": "resource_outage",
+      "parameter": "T-001",
+      "question": "What if T-001 becomes unavailable?",
+      "modification": "resource T-001 unavailable for the whole horizon",
+      "baseline": 637.8492638093529,
+      "scenario": 624.5408171194584,
+      "change": -13.308446689894481,
+      "assigned_before": 46,
+      "assigned_after": 45,
+      "late_before": 11,
+      "late_after": 10
+    },
+    {
+      "operator": "travel_increase",
+      "parameter": 1.25,
+      "question": "What if travel times increase by factor 1.25?",
+      "modification": "all travel times multiplied by 1.25",
+      "baseline": 637.8492638093529,
+      "scenario": 620.2997860016199,
+      "change": -17.54947780773307,
+      "assigned_before": 46,
+      "assigned_after": 45,
+      "late_before": 11,
+      "late_after": 14
+    },
+    {
+      "operator": "availability_drop",
+      "parameter": 0.2,
+      "question": "What if resource availability falls by 20%?",
+      "modification": "removed 3 of 14 resources from service: T-004, T-005, V-014",
+      "baseline": 637.8492638093529,
+      "scenario": 574.620396185984,
+      "change": -63.228867623368956,
+      "assigned_before": 46,
+      "assigned_after": 42,
+      "late_before": 11,
+      "late_after": 12
+    }
+  ],
   "artifacts": [
     "results\\demo\\scenario.json",
     "results\\demo\\baseline_metrics.csv",
@@ -28,91 +108,93 @@
       "number": 1,
       "title": "Scenario created and validated",
       "facts": [
-        "25 tasks, 8 resources (5 teams / 3 vehicles)",
-        "horizon [00:00-12:00)  demand 1185 min  available 2325 min",
+        "60 tasks, 14 resources (9 teams / 5 vehicles)",
+        "horizon [00:00-12:00)  demand 3169 min  available 4241 min",
         "capabilities ['crane_heavy', 'electrical', 'hazmat', 'heavy_lift', 'hvac', 'network', 'plumbing', 'refrigerated', 'structural', 'transport', 'vehicle', 'water_treatment']",
         "static feasibility: FEASIBLE"
       ],
-      "seconds": 0.0011220000160392374
+      "seconds": 0.0018434000085107982
     },
     {
       "number": 2,
       "title": "Baseline plan generated",
       "facts": [
-        "PLAN-0002 [FEASIBLE] score=301.03 assigned=22/25 late=7 travel=385.0km solver=LOCAL_SEARCH",
-        "Plan score: 301.03",
-        "Service level: 89.0%",
-        "Task completion rate: 88.0%",
-        "Deadline violation rate: 31.8%",
-        "Mean lateness: 10.4 min",
-        "Travel distance: 384.98 km",
-        "Operating cost: 865.75 cost",
-        "Mean utilisation: 78.2%",
-        "T-024 -> T-001: required_skills=ok(2/2); capacity=ok(n/a); availability=ok(441-720); maintenance=ok(0 block(s)); deadline=FAIL(ends 607, due 557); travel=ok(48.4 km / 76 min); priority=ok(Low) | objective +9.49 | alternative V-008: -19.5 km, -1.08 cost",
-        "explanations attached: 22"
+        "PLAN-0002 [FEASIBLE] score=637.85 assigned=46/60 late=11 travel=683.3km solver=LOCAL_SEARCH",
+        "Plan score: 637.85",
+        "Service level: 79.3%",
+        "Task completion rate: 76.7%",
+        "Deadline violation rate: 23.9%",
+        "Mean lateness: 7.3 min",
+        "Travel distance: 683.28 km",
+        "Operating cost: 1,585.88 cost",
+        "Mean utilisation: 80.6%",
+        "T-015 -> T-001: required_skills=ok(2/2); capacity=ok(n/a); availability=ok(391-720); maintenance=ok(0 block(s)); deadline=ok(ends 557, due 588); travel=ok(25.8 km / 43 min); priority=ok(Low) | objective +10.53 | alternative V-014: -15.6 km, -0.85 cost",
+        "explanations attached: 46"
       ],
-      "seconds": 0.4211399000196252
+      "seconds": 3.395423900015885
     },
     {
       "number": 3,
       "title": "Simulation executed",
       "facts": [
-        "sim 0-697 (00:00-11:37): 22 completed, 7 late, 0 failed, 0 replan(s), 66 events",
-        "first events: 06:56 TASK_ARRIVE | 07:09 TASK_ARRIVE | 07:14 TASK_ARRIVE"
+        "sim 0-720 (00:00-12:00): 46 completed, 11 late, 0 failed, 0 replan(s), 138 events",
+        "first events: 06:36 TASK_ARRIVE | 06:42 TASK_ARRIVE | 06:50 TASK_ARRIVE"
       ],
-      "seconds": 0.00041439998312853277
+      "seconds": 0.001060700014932081
     },
     {
       "number": 4,
-      "title": "Disruption injected: V-008 fails at 03:00",
+      "title": "Disruption injected: V-012 fails at 03:00",
       "facts": [
-        "affected tasks: 5",
-        "T-021 [07:32-08:02], T-002 [08:02-08:47], T-015 [08:48-09:18], T-013 [10:43-11:03], T-014 [11:03-11:23]"
+        "affected tasks: 7",
+        "T-023 [07:17-07:47], T-001 [07:52-08:37], T-022 [08:37-08:57], T-006 [09:02-09:22], T-035 [09:22-09:42], T-010 [09:43-10:43]"
       ],
-      "seconds": 0.0001829999964684248
+      "seconds": 0.00039489998016506433
     },
     {
       "number": 5,
       "title": "Local repair",
       "facts": [
-        "strategy: sequential  candidates considered: 24",
-        "recovered 4 task(s) in 6.2 ms",
-        "unrecovered: ['T-013', 'T-018', 'T-006', 'T-005']  (4 task(s) could not be re-inserted without violating a hard constraint)",
-        "plan churn: 5/22 assignments changed, travel -51.8 km"
+        "strategy: sequential  candidates considered: 63",
+        "recovered 7 task(s) in 90.0 ms",
+        "unrecovered: ['T-031', 'T-057', 'T-047', 'T-058', 'T-022', 'T-042', 'T-024', 'T-019', 'T-052', 'T-032', 'T-029', 'T-009', 'T-037', 'T-044']  (14 task(s) could not be re-inserted without violating a hard constraint)",
+        "plan churn: 9/46 assignments changed, travel +96.2 km"
       ],
-      "seconds": 0.3596160000015516
+      "seconds": 5.118863100011367
     },
     {
       "number": 6,
       "title": "Full re-optimization (for comparison)",
       "facts": [
-        "PLAN-0007 [FEASIBLE] score=289.36 assigned=21/25 late=7 travel=414.1km solver=LOCAL_SEARCH",
-        "runtime 352.2 ms vs local repair 6.2 ms (57x slower)",
-        "churn 11/22 assignments changed",
-        "service: baseline 89.0% -> degraded 68.5% -> full 85.6%  (recovery 83.8%)"
+        "PLAN-0007 [FEASIBLE] score=628.37 assigned=46/60 late=17 travel=800.6km solver=LOCAL_SEARCH",
+        "runtime 5024.2 ms vs local repair 90.0 ms (56x slower)",
+        "churn 38/46 assignments changed",
+        "service: baseline 79.3% -> degraded 66.9% -> full 78.4%  (recovery 92.5%)"
       ],
-      "seconds": 0.00024059999850578606
+      "seconds": 0.00041009997949004173
     },
     {
       "number": 7,
-      "title": "Urgent demand surge: +8 high-priority tasks",
+      "title": "Urgent demand surge: +18 high-priority tasks",
       "facts": [
-        "replanned scenario: 33 tasks (was 25)",
-        "urgent tasks accepted into the plan: 3/8 (38%)",
-        "PLAN-0010 [FEASIBLE] score=324.08 assigned=23/33 late=10 travel=367.4km solver=LOCAL_SEARCH"
+        "replanned scenario: 78 tasks (was 60)",
+        "urgent tasks accepted into the plan: 9/18 (50%)",
+        "PLAN-0010 [FEASIBLE] score=741.91 assigned=53/78 late=22 travel=827.6km solver=LOCAL_SEARCH"
       ],
-      "seconds": 0.48660460000974126
+      "seconds": 7.659860500018112
     },
     {
       "number": 8,
-      "title": "What-if: deadlines 15% tighter",
+      "title": "What-if: 6 operators, all re-solved",
       "facts": [
-        "What if deadlines become 15% tighter?",
-        "modification: tightened 25/25 deadlines by 15% of their slack",
-        "baseline 301.03 -> scenario 300.95 (-0.09)",
-        "Plan score 301.0->300.9; Service level 0.9->0.9; Tasks assigned 22.0->22.0; Late tasks 7.0->6.0"
+        "capacity_reduction     637.85 ->   638.99 (  +1.14)  assigned 46->46  late 11->12",
+        "demand_increase        637.85 ->   783.80 (+145.95)  assigned 46->55  late 11->8",
+        "deadline_tighten       637.85 ->   638.06 (  +0.21)  assigned 46->46  late 11->16",
+        "resource_outage        637.85 ->   624.54 ( -13.31)  assigned 46->45  late 11->10",
+        "travel_increase        637.85 ->   620.30 ( -17.55)  assigned 46->45  late 11->14",
+        "availability_drop      637.85 ->   574.62 ( -63.23)  assigned 46->42  late 11->12"
       ],
-      "seconds": 0.35883119999198243
+      "seconds": 29.5665175000031
     },
     {
       "number": 9,
@@ -120,7 +202,7 @@
       "facts": [
         "7 files under results\\demo"
       ],
-      "seconds": 0.13759890000801533
+      "seconds": 0.09005369999795221
     }
   ]
 }
