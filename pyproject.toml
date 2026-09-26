@@ -1,0 +1,122 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orion-ops"
+version = "0.1.0"
+description = "ORION - Operational Resource Intelligence & Optimization Network"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ORION" }]
+keywords = [
+  "operations-research",
+  "scheduling",
+  "vehicle-routing",
+  "constraint-programming",
+  "decision-support",
+  "discrete-event-simulation",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "ortools>=9.10,<10",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pandas>=2.1",
+  "networkx>=3.1",
+  "pydantic>=2.6,<3",
+  "fastapi>=0.110,<1",
+  "uvicorn[standard]>=0.27",
+  "sqlalchemy>=2.0,<3",
+  "alembic>=1.13",
+  "psycopg2-binary>=2.9",
+  "pyyaml>=6.0",
+  "click>=8.1",
+  "jinja2>=3.1",
+  "matplotlib>=3.8",
+  "tqdm>=4.66",
+  "reportlab>=4.0",
+  "pypdf>=4.0",
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "hypothesis>=6.100",
+  "ruff>=0.5",
+  "mypy>=1.10",
+]
+postgres = ["psycopg2-binary>=2.9"]
+
+[project.scripts]
+orion = "orion.cli.main:cli"
+
+[tool.setuptools]
+package-dir = { "" = "backend/src" }
+
+[tool.setuptools.packages.find]
+where = ["backend/src"]
+
+[tool.setuptools.package-data]
+orion = ["py.typed", "resources/fixtures/*.json"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers --durations=10"
+markers = [
+  "slow: long-running benchmark or scale test",
+  "solver: requires a working optimization solver",
+  "integration: exercises multiple ORION subsystems",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+branch = true
+source = ["backend/src/orion"]
+omit = ["*/tests/*", "*/__main__.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["backend/src", "tests", "scripts"]
+extend-exclude = ["frontend", "results", "experiments", "docs/_build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+  "E501",    # line length is handled by the formatter
+  "B008",    # FastAPI Depends() in defaults is the documented pattern
+  "RUF012",  # ClassVar annotations on pydantic/sqlalchemy tables
+  "SIM108",  # ternary rewrites hurt readability in metrics code
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+"backend/src/orion/api/*" = ["B008"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["backend/src/orion", "scripts"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+disallow_untyped_defs = false
+no_implicit_optional = true
+warn_redundant_casts = true
+plugins = []
+exclude = ["frontend/"]
+
+[[tool.mypy.overrides]]
+module = ["ortools.*", "pandas.*", "networkx.*", "matplotlib.*", "psycopg2.*"]
+ignore_missing_imports = true
