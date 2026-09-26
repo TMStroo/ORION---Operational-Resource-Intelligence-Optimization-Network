@@ -43,9 +43,30 @@ class SolverStatus(str):
     ERROR = "ERROR"
     NOT_APPLICABLE = "NOT_APPLICABLE"
 
+    #: The solver proved optimality **of a relaxation of the true problem**, so
+    #: the returned plan is feasible but is not known to be the best possible
+    #: plan. This is the honest status for a min-cost-flow relaxation and for
+    #: the MILP, whose formulation cannot see intra-route travel: SCIP genuinely
+    #: proves its own model optimal, but that model is weaker than ORION's
+    #: objective, so reporting plain ``OPTIMAL`` alongside CP-SAT would invite
+    #: the reader to treat two different guarantees as one. The tiny-instance
+    #: cross-checks in `orion.optimization.reference` demonstrate the
+    #: difference: on the same fixtures the MILP reports OPTIMAL yet scores
+    #: below the brute-force optimum.
+    RELAXATION_OPTIMAL = "RELAXATION_OPTIMAL"
+
 
 #: Statuses that mean "there is a usable plan to show the user".
-USABLE_STATUSES = frozenset({SolverStatus.OPTIMAL, SolverStatus.FEASIBLE, SolverStatus.TIME_LIMIT})
+USABLE_STATUSES = frozenset({
+    SolverStatus.OPTIMAL,
+    SolverStatus.FEASIBLE,
+    SolverStatus.TIME_LIMIT,
+    SolverStatus.RELAXATION_OPTIMAL,
+})
+
+#: Statuses that assert nothing beyond "this plan is feasible". Only plain
+#: ``OPTIMAL`` claims a proven global optimum of the full objective.
+PROVEN_OPTIMAL_STATUSES = frozenset({SolverStatus.OPTIMAL})
 
 
 class SolverName(str):
@@ -71,9 +92,12 @@ SOLVER_DESCRIPTIONS: Mapping[str, str] = {
     SolverName.CP_SAT: "Google OR-Tools CP-SAT: explicit integer decision variables, "
     "interval-based no-overlap, reports proven optimality and a bound.",
     SolverName.MILP: "OR-Tools linear solver (SCIP) on an explicit MILP formulation with "
-    "binary assignment vars, time-indexed start vars and linearised travel.",
+    "binary assignment vars, time-indexed start vars and linearised travel. The model "
+    "cannot express multi-stop route cost, so it optimises a relaxation of the full "
+    "objective and reports RELAXATION_OPTIMAL rather than OPTIMAL.",
     SolverName.MIN_COST_FLOW: "Min-cost flow relaxation solved with OR-Tools SimpleMinCostFlow: "
-    "optimal for capacity/assignment structure, no sequencing.",
+    "optimal for capacity/assignment structure, no sequencing, so it reports "
+    "RELAXATION_OPTIMAL.",
     SolverName.HEURISTIC: "ORION constructive heuristic: greedy by priority-density with "
     "regret-k insertion, cheapest-insertion repair, deterministic.",
     SolverName.LOCAL_SEARCH: "ORION local search: adaptive large-neighbourhood destroy-and-repair "

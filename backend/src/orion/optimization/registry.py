@@ -8,7 +8,7 @@ scenario's own structure rather than from a hard-coded table in the UI.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, Sequence
 
 from orion.domain.plans import (
@@ -76,11 +76,17 @@ SOLVER_SPECS: tuple[SolverSpec, ...] = (
     SolverSpec(
         name=SolverName.MILP,
         kind="mixed_integer_linear",
+        # `exact` means the formulation uses no heuristic shortcuts; it does not
+        # mean it models the full objective. The linear model prices travel
+        # between consecutive assignments but cannot express the cost of a
+        # multi-stop route, so it is a relaxation of the true scheduling
+        # problem - hence produces_proven_optimality=False and the
+        # RELAXATION_OPTIMAL status it now reports.
         exact=True,
         supports_dependencies=True,
         supports_travel=True,
         supports_max_work=True,
-        produces_proven_optimality=True,
+        produces_proven_optimality=False,
         typical_scale="<= ~60 tasks (big-M grows quadratically)",
         description=SOLVER_DESCRIPTIONS[SolverName.MILP],
         factory=MilpSolver,
@@ -229,6 +235,19 @@ class SolveResult:
         }
 
 
+#: Statuses for which a reported objective is a real, comparable score. An
+#: errored or infeasible run has no solution quality to report, and its 0.0 is
+#: left alone so a missing result is never mistaken for a perfect one.
+_COMPARABLE_STATUSES = frozenset(
+    {
+        getattr(SolverStatus, "OPTIMAL", "OPTIMAL"),
+        getattr(SolverStatus, "FEASIBLE", "FEASIBLE"),
+        getattr(SolverStatus, "TIME_LIMIT", "TIME_LIMIT"),
+        getattr(SolverStatus, "RELAXATION_OPTIMAL", "RELAXATION_OPTIMAL"),
+    }
+)
+
+
 def run_solver(
     name: str,
     context: SchedulingContext,
@@ -307,6 +326,27 @@ def run_solver(
         plan = build_plan(
             context, assignments, run, plan_id=plan_id, strategy=name
         )
+        # Fairness contract: a solver's own reported objective is whatever that
+        # solver chose to write down, and solvers disagree - CP-SAT reports a
+        # scaled integer value, the constructive heuristics and the flow
+        # relaxation report nothing at all (0.0), and the MILP reports its SCIP
+        # objective. Comparing those numbers across solvers would compare
+        # reporting conventions, not solution quality.
+        #
+        # So the single value that is ever compared is recomputed here, by
+        # ORION's own objective, from the assignments the solver produced. The
+        # solver's own figure is preserved as `internal_objective` for
+        # diagnosis. This is what makes the benchmark table meaningful: every
+        # row is scored the same way, by code that did not participate in
+        # solving.
+        scored = plan.objective.total
+        internal = run.objective
+        if run.status in _COMPARABLE_STATUSES and plan.assignments:
+            run = replace(
+                run,
+                objective=scored,
+                raw={**dict(run.raw), "internal_objective": internal},
+            )
         return SolveResult(
             solver=name, plan=plan, run=run, diagnostics=diagnostics, applicable=True
         )

@@ -218,6 +218,85 @@ def cmd_whatif(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Cross-check every solver against a brute-force optimum.
+
+    This is the evidence that the objective and the constraints are right, not
+    just self-consistent: the reference enumerator solves each micro-instance
+    exhaustively, and the exit code is non-zero if an exact solver misses that
+    optimum or if any solver scores above it (which would mean the enumeration
+    or the scoring is wrong).
+
+    The objective is a reward, so a *lower* score than the proven optimum is an
+    expected shortfall for a relaxation or a heuristic, and a *higher* score is
+    impossible and therefore a bug.
+    """
+    from orion.optimization.registry import ALL_SOLVERS
+    from orion.optimization.tiny import TINY_FIXTURES
+    from orion.optimization.verify import multi_seed_heuristic_quality, verify_all
+
+    solvers = tuple(args.solvers) if args.solvers else tuple(ALL_SOLVERS)
+    print(f"formulation cross-check: {len(TINY_FIXTURES)} fixtures x {len(solvers)} solver(s)")
+    report = verify_all(solvers=solvers, time_limit_s=args.time_limit, seed=args.seed)
+
+    print("\nproved optima (brute force)")
+    print(f"  {'fixture':32s} {'optimum':>12s} {'combinations':>14s} {'ms':>8s}")
+    for name, ref in report.references.items():
+        best = "n/a" if ref.best_score is None else f"{ref.best_score:.4f}"
+        print(f"  {name:32s} {best:>12s} {ref.combinations_tried:>14,} {ref.seconds * 1000:>8.1f}")
+
+    print("\nsolver cross-check")
+    header = f"  {'solver':15s} {'fixture':30s} {'status':19s} {'objective':>10s} {'gap %':>9s} {'hard':>5s} {'ms':>8s}"
+    print(header)
+    for row in report.results:
+        gap = "-" if row.gap_pct is None else f"{row.gap_pct:+.3f}"
+        print(
+            f"  {row.solver:15s} {row.fixture:30s} {row.status:19s} {row.objective:>10.4f} "
+            f"{gap:>9s} {row.hard_violations:>5d} {row.runtime_s * 1000:>8.1f}"
+        )
+
+    spread = multi_seed_heuristic_quality(
+        TINY_FIXTURES["five_tasks_two_resources"],
+        seeds=tuple(range(args.seeds)),
+        time_limit_s=args.time_limit,
+    )
+    print("\nheuristic spread across seeds (five_tasks_two_resources)")
+    print(f"  {'solver':15s} {'mean':>10s} {'median':>10s} {'best':>10s} {'worst':>10s} {'spread':>9s} {'mean ms':>9s}")
+    for name, stats in spread.items():
+        print(
+            f"  {name:15s} {stats['mean']:>10.4f} {stats['median']:>10.4f} {stats['best']:>10.4f} "
+            f"{stats['worst']:>10.4f} {stats['spread']:>9.4f} {stats['runtime_mean_s'] * 1000:>9.2f}"
+        )
+
+    payload = report.to_dict()
+    payload["seed_spread"] = spread
+    destination = Path(args.out) / "verify.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+
+    proven = report.proven_mismatches()
+    beats = report.beats_reference()
+    shortfall = report.shortfall()
+    print()
+    if proven:
+        print(f"FAIL  {len(proven)} exact-solver row(s) missed the proven optimum:")
+        for row in proven:
+            print(f"        {row.solver} on {row.fixture}: {row.objective} vs {row.reference_objective}")
+    else:
+        print("PASS  every exact solver matched the proven optimum on every fixture")
+    if beats:
+        print(f"FAIL  {len(beats)} row(s) scored above the proven optimum, which is impossible:")
+        for row in beats:
+            print(f"        {row.solver} on {row.fixture}: +{row.gap_pct:.3f}%")
+    else:
+        print("PASS  no solver scored above a proven optimum")
+    if shortfall:
+        worst = min(row.gap_pct or 0.0 for row in shortfall)
+        print(f"note  {len(shortfall)} expected shortfall(s), worst {worst:+.3f}% (relaxations and heuristics)")
+    print(f"wrote {destination}")
+    return 1 if (proven or beats) else 0
+
+
 def cmd_benchmark(args: argparse.Namespace) -> int:
     from orion.experiments.benchmarks import SUITES, run_experiment
     from orion.experiments.tracker import ExperimentStore
@@ -389,11 +468,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=8)
     p.set_defaults(func=cmd_benchmark)
 
-    p = sub.add_parser("experiment", help="inspect experiment records")
-    p.add_argument("action", choices=["list", "show"])
-    p.add_argument("--root")
-    p.add_argument("experiment_id", nargs="?")
-    p.set_defaults(func=cmd_experiment)
+    # `verify` is the formulation-correctness check: every solver against an
+    # independent brute-force optimum on hand-built micro-instances.
+    _p = sub.add_parser(
+        "verify",
+        help="cross-check every solver against a brute-force optimum on tiny instances",
+    )
+    _p.add_argument("--out", default="results/verify", help="output directory")
+    _p.add_argument("--time-limit", type=float, default=20.0, help="per-solver time budget (s)")
+    _p.add_argument("--seed", type=int, default=0, help="solver seed")
+    _p.add_argument("--seeds", type=int, default=5, help="seeds for the heuristic spread table")
+    _p.add_argument("--solvers", nargs="*", default=None, help="restrict to these solvers")
+    _p.set_defaults(func=cmd_verify)
+
+    _p = sub.add_parser("experiment", help="inspect experiment records")
+    _p.add_argument("action", choices=["list", "show"])
+    _p.add_argument("--root")
+    _p.add_argument("experiment_id", nargs="?")
+    _p.set_defaults(func=cmd_experiment)
 
     p = sub.add_parser("audit", help="verify experiment provenance and integrity")
     p.add_argument("action", choices=["verify"])

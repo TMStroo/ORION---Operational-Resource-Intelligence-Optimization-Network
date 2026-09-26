@@ -479,7 +479,13 @@ class MilpSolver:
         optimal = status == pywraplp.Solver.OPTIMAL
         run = SolverRun(
             solver=self.name,
-            status=SolverStatus.OPTIMAL if optimal else SolverStatus.FEASIBLE,
+            # SCIP proves optimality of *this* formulation. The formulation prices travel
+        # between consecutive assignments but cannot express the cost of a
+        # multi-stop route, so the model is a relaxation of ORION's objective and
+        # its proven optimum can be worse than a feasible schedule the other
+        # solvers find. Reporting RELAXATION_OPTIMAL makes that explicit instead
+        # of presenting a model-bound as a schedule-bound.
+        status=SolverStatus.RELAXATION_OPTIMAL if optimal else SolverStatus.FEASIBLE,
             runtime_s=runtime,
             objective=internal,
             feasible=True,

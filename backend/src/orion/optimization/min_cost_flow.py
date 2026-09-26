@@ -295,7 +295,10 @@ class MinCostFlowSolver:
         relax_value = -flow_cost / COST_SCALE
         run = SolverRun(
             solver=self.name,
-            status=SolverStatus.OPTIMAL if assignments else SolverStatus.INFEASIBLE,
+            # A min-cost flow over an assignment relaxation has no notion of route order,
+        # so optimality of the flow is not optimality of a schedule. Reporting
+        # RELAXATION_OPTIMAL keeps the two guarantees distinguishable.
+        status=SolverStatus.RELAXATION_OPTIMAL if assignments else SolverStatus.INFEASIBLE,
             runtime_s=runtime,
             objective=0.0,  # scored by build_plan
             feasible=bool(assignments),
