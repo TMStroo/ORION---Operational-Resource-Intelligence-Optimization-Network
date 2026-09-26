@@ -1,0 +1,1018 @@
+{
+  "data": {
+    "constraints": {
+      "allow_late": true,
+      "allow_unassigned": true,
+      "enforce_capability": true,
+      "enforce_capacity": true,
+      "enforce_deadlines": true,
+      "enforce_dependencies": true,
+      "enforce_maintenance": true,
+      "enforce_max_work": true,
+      "enforce_release_times": true,
+      "enforce_shift": true,
+      "enforce_travel": true,
+      "max_unassigned_fraction": 1.0,
+      "require_depot_return": false
+    },
+    "depot": "DEPOT",
+    "description": "ORION generated medium scenario (25 tasks, seed 2026)",
+    "horizon": [
+      0,
+      720
+    ],
+    "id": "SCN-orion-medium-2026",
+    "metadata": {
+      "config": {
+        "congestion_factor": 1.0,
+        "constraint_overrides": {},
+        "deadline_tightness": 0.5,
+        "dependency_rate": 0.15,
+        "description": "ORION generated medium scenario (25 tasks, seed 2026)",
+        "duration_choices": [
+          20,
+          30,
+          45,
+          60,
+          90
+        ],
+        "geographic_density": 1.0,
+        "horizon_minutes": 720,
+        "maintenance_count": 2,
+        "max_work_fraction": 0.85,
+        "name": "orion-medium",
+        "num_locations": 8,
+        "num_tasks": 25,
+        "num_teams": 5,
+        "num_vehicles": 3,
+        "priority_weights": [
+          0.3,
+          0.3,
+          0.25,
+          0.15
+        ],
+        "release_window": 180,
+        "require_depot_return": false,
+        "resource_scarcity": 1.0,
+        "seed": 2026,
+        "shift_pattern": "day",
+        "tags": [
+          "medium",
+          "generated"
+        ],
+        "travel_speed_kmh": 45.0,
+        "weight_overrides": {
+          "w_completion": 10.0,
+          "w_cost": 0.01,
+          "w_dispatch": 0.05,
+          "w_late": 0.4,
+          "w_move_idle": 0.02,
+          "w_overload": 0.5,
+          "w_priority": 2.0,
+          "w_travel": 0.02,
+          "w_violation": 50.0
+        }
+      },
+      "generator": "orion.data.scenario_generator",
+      "generator_version": "1.0.0",
+      "locations": 9,
+      "seed": 2026
+    },
+    "name": "orion-medium",
+    "objective_weights": {
+      "w_completion": 10.0,
+      "w_cost": 0.01,
+      "w_dispatch": 0.05,
+      "w_late": 0.4,
+      "w_move_idle": 0.02,
+      "w_overload": 0.5,
+      "w_priority": 2.0,
+      "w_travel": 0.02,
+      "w_violation": 50.0
+    },
+    "resources": [
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "water_treatment"
+        ],
+        "capacity": {
+          "seats": 3.0
+        },
+        "fixed_dispatch_cost": 4.14,
+        "home_location": "DEPOT",
+        "id": "T-001",
+        "kind": "TEAM",
+        "max_work_minutes": 237,
+        "operating_cost_per_hour": 69.98,
+        "shift_end": 720,
+        "shift_start": 441,
+        "speed_factor": 0.857,
+        "status": "AVAILABLE",
+        "unavailable": []
+      },
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "water_treatment"
+        ],
+        "capacity": {
+          "seats": 3.0
+        },
+        "fixed_dispatch_cost": 16.01,
+        "home_location": "DEPOT",
+        "id": "T-002",
+        "kind": "TEAM",
+        "max_work_minutes": 276,
+        "operating_cost_per_hour": 64.0,
+        "shift_end": 720,
+        "shift_start": 395,
+        "speed_factor": 0.877,
+        "status": "AVAILABLE",
+        "unavailable": []
+      },
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "water_treatment"
+        ],
+        "capacity": {
+          "seats": 4.0
+        },
+        "fixed_dispatch_cost": 10.85,
+        "home_location": "DEPOT",
+        "id": "T-003",
+        "kind": "TEAM",
+        "max_work_minutes": 238,
+        "operating_cost_per_hour": 60.0,
+        "shift_end": 720,
+        "shift_start": 439,
+        "speed_factor": 1.081,
+        "status": "AVAILABLE",
+        "unavailable": []
+      },
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "water_treatment"
+        ],
+        "capacity": {
+          "seats": 4.0
+        },
+        "fixed_dispatch_cost": 15.0,
+        "home_location": "DEPOT",
+        "id": "T-004",
+        "kind": "TEAM",
+        "max_work_minutes": 250,
+        "operating_cost_per_hour": 51.84,
+        "shift_end": 720,
+        "shift_start": 425,
+        "speed_factor": 0.754,
+        "status": "AVAILABLE",
+        "unavailable": []
+      },
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "water_treatment"
+        ],
+        "capacity": {
+          "seats": 4.0
+        },
+        "fixed_dispatch_cost": 6.0,
+        "home_location": "DEPOT",
+        "id": "T-005",
+        "kind": "TEAM",
+        "max_work_minutes": 237,
+        "operating_cost_per_hour": 65.98,
+        "shift_end": 720,
+        "shift_start": 441,
+        "speed_factor": 0.78,
+        "status": "AVAILABLE",
+        "unavailable": [
+          [
+            570,
+            690
+          ]
+        ]
+      },
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "transport",
+          "vehicle",
+          "water_treatment"
+        ],
+        "capacity": {
+          "kg": 200.0,
+          "seats": 1000.0,
+          "volume_l": 2000.0
+        },
+        "fixed_dispatch_cost": 10.19,
+        "home_location": "DEPOT",
+        "id": "V-006",
+        "kind": "VEHICLE",
+        "max_work_minutes": 230,
+        "operating_cost_per_hour": 68.2,
+        "shift_end": 720,
+        "shift_start": 449,
+        "speed_factor": 1.874,
+        "status": "AVAILABLE",
+        "unavailable": []
+      },
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "transport",
+          "vehicle",
+          "water_treatment"
+        ],
+        "capacity": {
+          "kg": 200.0,
+          "seats": 2000.0,
+          "volume_l": 200.0
+        },
+        "fixed_dispatch_cost": 3.67,
+        "home_location": "DEPOT",
+        "id": "V-007",
+        "kind": "VEHICLE",
+        "max_work_minutes": 247,
+        "operating_cost_per_hour": 25.93,
+        "shift_end": 720,
+        "shift_start": 429,
+        "speed_factor": 1.297,
+        "status": "AVAILABLE",
+        "unavailable": [
+          [
+            635,
+            695
+          ]
+        ]
+      },
+      {
+        "capabilities": [
+          "crane_heavy",
+          "electrical",
+          "hazmat",
+          "heavy_lift",
+          "hvac",
+          "network",
+          "plumbing",
+          "refrigerated",
+          "structural",
+          "transport",
+          "vehicle",
+          "water_treatment"
+        ],
+        "capacity": {
+          "kg": 2000.0,
+          "seats": 1000.0,
+          "volume_l": 500.0
+        },
+        "fixed_dispatch_cost": 14.74,
+        "home_location": "DEPOT",
+        "id": "V-008",
+        "kind": "VEHICLE",
+        "max_work_minutes": 258,
+        "operating_cost_per_hour": 23.81,
+        "shift_end": 720,
+        "shift_start": 416,
+        "speed_factor": 1.308,
+        "status": "AVAILABLE",
+        "unavailable": []
+      }
+    ],
+    "tags": [
+      "medium",
+      "generated"
+    ],
+    "tasks": [
+      {
+        "deadline": 475,
+        "dependencies": [],
+        "duration": 60,
+        "id": "T-001",
+        "location": "LOC-04",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 402,
+        "required_capabilities": [
+          "refrigerated"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 494,
+        "dependencies": [],
+        "duration": 45,
+        "id": "T-002",
+        "location": "LOC-06",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 408,
+        "required_capabilities": [
+          "heavy_lift"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 535,
+        "dependencies": [],
+        "duration": 45,
+        "id": "T-003",
+        "location": "LOC-08",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 457,
+        "required_capabilities": [
+          "network"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 648,
+        "dependencies": [
+          "T-003"
+        ],
+        "duration": 90,
+        "id": "T-004",
+        "location": "LOC-03",
+        "max_lateness": null,
+        "priority": 2,
+        "release_time": 502,
+        "required_capabilities": [
+          "water_treatment"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 720,
+        "dependencies": [],
+        "duration": 90,
+        "id": "T-005",
+        "location": "LOC-02",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 599,
+        "required_capabilities": [
+          "structural"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 596,
+        "dependencies": [],
+        "duration": 60,
+        "id": "T-006",
+        "location": "LOC-01",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 491,
+        "required_capabilities": [
+          "electrical"
+        ],
+        "required_capacity": [
+          {
+            "amount": 100.0,
+            "dimension": "kg"
+          }
+        ],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 652,
+        "dependencies": [],
+        "duration": 60,
+        "id": "T-007",
+        "location": "LOC-03",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 534,
+        "required_capabilities": [
+          "heavy_lift"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 634,
+        "dependencies": [],
+        "duration": 30,
+        "id": "T-008",
+        "location": "LOC-05",
+        "max_lateness": null,
+        "priority": 4,
+        "release_time": 571,
+        "required_capabilities": [
+          "hazmat"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 710,
+        "dependencies": [],
+        "duration": 45,
+        "id": "T-009",
+        "location": "LOC-07",
+        "max_lateness": null,
+        "priority": 2,
+        "release_time": 634,
+        "required_capabilities": [
+          "crane_heavy"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 557,
+        "dependencies": [],
+        "duration": 20,
+        "id": "T-010",
+        "location": "LOC-05",
+        "max_lateness": null,
+        "priority": 4,
+        "release_time": 504,
+        "required_capabilities": [
+          "electrical"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 589,
+        "dependencies": [],
+        "duration": 60,
+        "id": "T-011",
+        "location": "LOC-06",
+        "max_lateness": null,
+        "priority": 2,
+        "release_time": 488,
+        "required_capabilities": [
+          "crane_heavy"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 571,
+        "dependencies": [],
+        "duration": 20,
+        "id": "T-012",
+        "location": "LOC-04",
+        "max_lateness": null,
+        "priority": 2,
+        "release_time": 538,
+        "required_capabilities": [
+          "structural",
+          "water_treatment"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 608,
+        "dependencies": [],
+        "duration": 20,
+        "id": "T-013",
+        "location": "LOC-03",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 530,
+        "required_capabilities": [
+          "refrigerated"
+        ],
+        "required_capacity": [
+          {
+            "amount": 250.0,
+            "dimension": "kg"
+          }
+        ],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 720,
+        "dependencies": [],
+        "duration": 20,
+        "id": "T-014",
+        "location": "LOC-03",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 654,
+        "required_capabilities": [
+          "hazmat"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 599,
+        "dependencies": [],
+        "duration": 30,
+        "id": "T-015",
+        "location": "LOC-06",
+        "max_lateness": null,
+        "priority": 4,
+        "release_time": 528,
+        "required_capabilities": [
+          "plumbing"
+        ],
+        "required_capacity": [
+          {
+            "amount": 500.0,
+            "dimension": "volume_l"
+          }
+        ],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 580,
+        "dependencies": [],
+        "duration": 20,
+        "id": "T-016",
+        "location": "LOC-01",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 515,
+        "required_capabilities": [
+          "hazmat"
+        ],
+        "required_capacity": [
+          {
+            "amount": 250.0,
+            "dimension": "volume_l"
+          }
+        ],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 661,
+        "dependencies": [],
+        "duration": 60,
+        "id": "T-017",
+        "location": "LOC-01",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 556,
+        "required_capabilities": [
+          "network",
+          "structural"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 720,
+        "dependencies": [],
+        "duration": 45,
+        "id": "T-018",
+        "location": "LOC-02",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 651,
+        "required_capabilities": [
+          "hazmat",
+          "refrigerated"
+        ],
+        "required_capacity": [
+          {
+            "amount": 50.0,
+            "dimension": "volume_l"
+          }
+        ],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 590,
+        "dependencies": [],
+        "duration": 20,
+        "id": "T-019",
+        "location": "LOC-07",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 539,
+        "required_capabilities": [
+          "crane_heavy",
+          "hazmat"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 696,
+        "dependencies": [],
+        "duration": 45,
+        "id": "T-020",
+        "location": "LOC-02",
+        "max_lateness": null,
+        "priority": 2,
+        "release_time": 608,
+        "required_capabilities": [
+          "water_treatment"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 494,
+        "dependencies": [],
+        "duration": 30,
+        "id": "T-021",
+        "location": "LOC-06",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 423,
+        "required_capabilities": [
+          "hvac",
+          "plumbing"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 720,
+        "dependencies": [],
+        "duration": 90,
+        "id": "T-022",
+        "location": "LOC-03",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 576,
+        "required_capabilities": [
+          "electrical",
+          "hazmat"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 679,
+        "dependencies": [],
+        "duration": 60,
+        "id": "T-023",
+        "location": "LOC-07",
+        "max_lateness": null,
+        "priority": 3,
+        "release_time": 588,
+        "required_capabilities": [
+          "refrigerated"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 557,
+        "dependencies": [],
+        "duration": 90,
+        "id": "T-024",
+        "location": "LOC-03",
+        "max_lateness": null,
+        "priority": 1,
+        "release_time": 409,
+        "required_capabilities": [
+          "heavy_lift",
+          "water_treatment"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      },
+      {
+        "deadline": 494,
+        "dependencies": [],
+        "duration": 30,
+        "id": "T-025",
+        "location": "LOC-03",
+        "max_lateness": null,
+        "priority": 2,
+        "release_time": 406,
+        "required_capabilities": [
+          "hazmat"
+        ],
+        "required_capacity": [],
+        "service_minutes_target": null,
+        "status": "PENDING"
+      }
+    ],
+    "travel": {
+      "congestion_factor": 1.0,
+      "distance_km": [
+        [
+          0.0,
+          38.088833639270185,
+          36.01939927316945,
+          48.421991697987806,
+          11.578469026602784,
+          28.73749345367477,
+          35.360574938764785,
+          26.552169647695454,
+          28.403880879203815
+        ],
+        [
+          38.088833639270185,
+          0.0,
+          53.104165599319984,
+          27.97258801040762,
+          48.493047924419024,
+          66.57921947574934,
+          66.66166637581152,
+          63.74686251887225,
+          16.452196965755057
+        ],
+        [
+          36.01939927316945,
+          53.104165599319984,
+          0.0,
+          75.68623592173151,
+          31.62819275583099,
+          41.376563245392916,
+          23.723484735594813,
+          36.33355673478719,
+          36.652668675009195
+        ],
+        [
+          48.421991697987806,
+          27.97258801040762,
+          75.68623592173151,
+          0.0,
+          59.95566282679226,
+          75.41306609600223,
+          83.13296792488525,
+          74.32044736813685,
+          41.43271539496295
+        ],
+        [
+          11.578469026602784,
+          48.493047924419024,
+          31.62819275583099,
+          59.95566282679226,
+          0.0,
+          18.254982360988468,
+          24.805336865279617,
+          15.29627457912546,
+          36.567140932810155
+        ],
+        [
+          28.73749345367477,
+          66.57921947574934,
+          41.376563245392916,
+          75.41306609600223,
+          18.254982360988468,
+          0.0,
+          22.65557436923637,
+          5.044144823456209,
+          54.74802879556488
+        ],
+        [
+          35.360574938764785,
+          66.66166637581152,
+          23.723484735594813,
+          83.13296792488525,
+          24.805336865279617,
+          22.65557436923637,
+          0.0,
+          18.27522916408984,
+          51.41882325569111
+        ],
+        [
+          26.552169647695454,
+          63.74686251887225,
+          36.33355673478719,
+          74.32044736813685,
+          15.29627457912546,
+          5.044144823456209,
+          18.27522916408984,
+          0.0,
+          51.18489937471793
+        ],
+        [
+          28.403880879203815,
+          16.452196965755057,
+          36.652668675009195,
+          41.43271539496295,
+          36.567140932810155,
+          54.74802879556488,
+          51.41882325569111,
+          51.18489937471793,
+          0.0
+        ]
+      ],
+      "locations": [
+        "DEPOT",
+        "LOC-01",
+        "LOC-02",
+        "LOC-03",
+        "LOC-04",
+        "LOC-05",
+        "LOC-06",
+        "LOC-07",
+        "LOC-08"
+      ],
+      "travel_minutes": [
+        [
+          0,
+          51,
+          48,
+          65,
+          15,
+          38,
+          47,
+          35,
+          38
+        ],
+        [
+          51,
+          0,
+          71,
+          37,
+          65,
+          89,
+          89,
+          85,
+          22
+        ],
+        [
+          48,
+          71,
+          0,
+          101,
+          42,
+          55,
+          32,
+          48,
+          49
+        ],
+        [
+          65,
+          37,
+          101,
+          0,
+          80,
+          101,
+          111,
+          99,
+          55
+        ],
+        [
+          15,
+          65,
+          42,
+          80,
+          0,
+          24,
+          33,
+          20,
+          49
+        ],
+        [
+          38,
+          89,
+          55,
+          101,
+          24,
+          0,
+          30,
+          7,
+          73
+        ],
+        [
+          47,
+          89,
+          32,
+          111,
+          33,
+          30,
+          0,
+          24,
+          69
+        ],
+        [
+          35,
+          85,
+          48,
+          99,
+          20,
+          7,
+          24,
+          0,
+          68
+        ],
+        [
+          38,
+          22,
+          49,
+          55,
+          49,
+          73,
+          69,
+          68,
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "export_schema": "orion.export/1",
+    "git_commit": "8258d3c9545b8cf29b70551e193ce8ce859d5108",
+    "kind": "scenario",
+    "objective_weights": {
+      "w_completion": 10.0,
+      "w_cost": 0.01,
+      "w_dispatch": 0.05,
+      "w_late": 0.4,
+      "w_move_idle": 0.02,
+      "w_overload": 0.5,
+      "w_priority": 2.0,
+      "w_travel": 0.02,
+      "w_violation": 50.0
+    },
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.7",
+    "seed": 2026,
+    "source": "demo:SCN-orion-medium-2026"
+  }
+}

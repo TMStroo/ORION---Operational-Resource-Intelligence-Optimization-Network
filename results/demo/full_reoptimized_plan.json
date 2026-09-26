@@ -1,0 +1,483 @@
+{
+  "data": {
+    "assignments": [
+      {
+        "end": 607,
+        "lateness": 50,
+        "location": "LOC-03",
+        "priority": 1,
+        "resource_id": "T-001",
+        "sequence_index": 0,
+        "start": 517,
+        "task_id": "T-024",
+        "travel_before": 76,
+        "travel_distance_km": 48.422
+      },
+      {
+        "end": 710,
+        "lateness": 49,
+        "location": "LOC-01",
+        "priority": 3,
+        "resource_id": "T-001",
+        "sequence_index": 1,
+        "start": 650,
+        "task_id": "T-017",
+        "travel_before": 43,
+        "travel_distance_km": 27.9726
+      },
+      {
+        "end": 494,
+        "lateness": 0,
+        "location": "LOC-06",
+        "priority": 3,
+        "resource_id": "T-002",
+        "sequence_index": 0,
+        "start": 449,
+        "task_id": "T-002",
+        "travel_before": 54,
+        "travel_distance_km": 35.3606
+      },
+      {
+        "end": 554,
+        "lateness": 0,
+        "location": "LOC-06",
+        "priority": 2,
+        "resource_id": "T-002",
+        "sequence_index": 1,
+        "start": 494,
+        "task_id": "T-011",
+        "travel_before": 0,
+        "travel_distance_km": 0.0
+      },
+      {
+        "end": 653,
+        "lateness": 0,
+        "location": "LOC-02",
+        "priority": 2,
+        "resource_id": "T-002",
+        "sequence_index": 2,
+        "start": 608,
+        "task_id": "T-020",
+        "travel_before": 36,
+        "travel_distance_km": 23.7235
+      },
+      {
+        "end": 529,
+        "lateness": 35,
+        "location": "LOC-03",
+        "priority": 2,
+        "resource_id": "T-003",
+        "sequence_index": 0,
+        "start": 499,
+        "task_id": "T-025",
+        "travel_before": 60,
+        "travel_distance_km": 48.422
+      },
+      {
+        "end": 619,
+        "lateness": 0,
+        "location": "LOC-03",
+        "priority": 2,
+        "resource_id": "T-003",
+        "sequence_index": 1,
+        "start": 529,
+        "task_id": "T-004",
+        "travel_before": 0,
+        "travel_distance_km": 0.0
+      },
+      {
+        "end": 679,
+        "lateness": 27,
+        "location": "LOC-03",
+        "priority": 1,
+        "resource_id": "T-003",
+        "sequence_index": 2,
+        "start": 619,
+        "task_id": "T-007",
+        "travel_before": 0,
+        "travel_distance_km": 0.0
+      },
+      {
+        "end": 699,
+        "lateness": 0,
+        "location": "LOC-03",
+        "priority": 1,
+        "resource_id": "T-003",
+        "sequence_index": 3,
+        "start": 679,
+        "task_id": "T-014",
+        "travel_before": 0,
+        "travel_distance_km": 0.0
+      },
+      {
+        "end": 505,
+        "lateness": 30,
+        "location": "LOC-04",
+        "priority": 1,
+        "resource_id": "T-004",
+        "sequence_index": 0,
+        "start": 445,
+        "task_id": "T-001",
+        "travel_before": 20,
+        "travel_distance_km": 11.5785
+      },
+      {
+        "end": 558,
+        "lateness": 0,
+        "location": "LOC-04",
+        "priority": 2,
+        "resource_id": "T-004",
+        "sequence_index": 1,
+        "start": 538,
+        "task_id": "T-012",
+        "travel_before": 0,
+        "travel_distance_km": 0.0
+      },
+      {
+        "end": 648,
+        "lateness": 0,
+        "location": "LOC-07",
+        "priority": 3,
+        "resource_id": "T-004",
+        "sequence_index": 2,
+        "start": 588,
+        "task_id": "T-023",
+        "travel_before": 27,
+        "travel_distance_km": 15.2963
+      },
+      {
+        "end": 693,
+        "lateness": 0,
+        "location": "LOC-07",
+        "priority": 2,
+        "resource_id": "T-004",
+        "sequence_index": 3,
+        "start": 648,
+        "task_id": "T-009",
+        "travel_before": 0,
+        "travel_distance_km": 0.0
+      },
+      {
+        "end": 514,
+        "lateness": 0,
+        "location": "LOC-08",
+        "priority": 3,
+        "resource_id": "V-006",
+        "sequence_index": 0,
+        "start": 469,
+        "task_id": "T-003",
+        "travel_before": 20,
+        "travel_distance_km": 28.4039
+      },
+      {
+        "end": 546,
+        "lateness": 0,
+        "location": "LOC-01",
+        "priority": 3,
+        "resource_id": "V-006",
+        "sequence_index": 1,
+        "start": 526,
+        "task_id": "T-016",
+        "travel_before": 12,
+        "travel_distance_km": 16.4522
+      },
+      {
+        "end": 623,
+        "lateness": 24,
+        "location": "LOC-06",
+        "priority": 4,
+        "resource_id": "V-006",
+        "sequence_index": 2,
+        "start": 593,
+        "task_id": "T-015",
+        "travel_before": 47,
+        "travel_distance_km": 66.6617
+      },
+      {
+        "end": 696,
+        "lateness": 0,
+        "location": "LOC-02",
+        "priority": 3,
+        "resource_id": "V-006",
+        "sequence_index": 3,
+        "start": 651,
+        "task_id": "T-018",
+        "travel_before": 17,
+        "travel_distance_km": 23.7235
+      },
+      {
+        "end": 495,
+        "lateness": 1,
+        "location": "LOC-06",
+        "priority": 1,
+        "resource_id": "V-007",
+        "sequence_index": 0,
+        "start": 465,
+        "task_id": "T-021",
+        "travel_before": 36,
+        "travel_distance_km": 35.3606
+      },
+      {
+        "end": 538,
+        "lateness": 0,
+        "location": "LOC-05",
+        "priority": 4,
+        "resource_id": "V-007",
+        "sequence_index": 1,
+        "start": 518,
+        "task_id": "T-010",
+        "travel_before": 23,
+        "travel_distance_km": 22.6556
+      },
+      {
+        "end": 563,
+        "lateness": 0,
+        "location": "LOC-07",
+        "priority": 3,
+        "resource_id": "V-007",
+        "sequence_index": 2,
+        "start": 543,
+        "task_id": "T-019",
+        "travel_before": 5,
+        "travel_distance_km": 5.0441
+      },
+      {
+        "end": 601,
+        "lateness": 0,
+        "location": "LOC-05",
+        "priority": 4,
+        "resource_id": "V-007",
+        "sequence_index": 3,
+        "start": 571,
+        "task_id": "T-008",
+        "travel_before": 5,
+        "travel_distance_km": 5.0441
+      }
+    ],
+    "created_at": "2026-09-26T16:44:00+00:00",
+    "disruption_id": "SCN-orion-medium-2026-FAIL-01",
+    "id": "PLAN-0007",
+    "metadata": {},
+    "metrics": {
+      "late_tasks": 7,
+      "score": 289.3631,
+      "service_level": 0.856354,
+      "tasks_assigned": 21,
+      "tasks_total": 25,
+      "total_dispatch_cost": 59.86,
+      "total_operating_cost": 897.14,
+      "total_travel_km": 414.121,
+      "total_travel_minutes": 481,
+      "total_worked_minutes": 925,
+      "violations_hard": 0,
+      "violations_total": 7
+    },
+    "objective": {
+      "completion": 210.0,
+      "cost_penalty": 8.9714,
+      "dispatch_penalty": 2.993,
+      "idle_move_penalty": 0.0,
+      "lateness_penalty": 1.44,
+      "overload_penalty": 0.0,
+      "priority": 100.0,
+      "total": 289.3631,
+      "travel_penalty": 7.2325,
+      "violation_penalty": 0.0
+    },
+    "parent_plan_id": "PLAN-0002",
+    "scenario_id": "SCN-orion-medium-2026",
+    "solver_runs": [
+      {
+        "feasible": true,
+        "notes": "ALNS: 400 iteration(s), 0 improvement(s), k_base=3, temp=0.923, budget=iteration cap",
+        "num_constraints": 5,
+        "num_iterations": 400,
+        "num_variables": 146,
+        "objective": 289.3631,
+        "optimality_gap": null,
+        "runtime_s": 0.351548,
+        "solver": "LOCAL_SEARCH",
+        "status": "FEASIBLE",
+        "time_limit_s": 10.0
+      }
+    ],
+    "status": "FEASIBLE",
+    "strategy": "LOCAL_SEARCH",
+    "utilization": [
+      {
+        "assigned_tasks": 2,
+        "idle_minutes": 43,
+        "operating_cost": 174.95,
+        "resource_id": "T-001",
+        "span_end": 710,
+        "span_start": 517,
+        "travel_km": 76.395,
+        "travel_minutes": 119,
+        "utilization": 0.7772,
+        "worked_minutes": 150
+      },
+      {
+        "assigned_tasks": 3,
+        "idle_minutes": 54,
+        "operating_cost": 160.0,
+        "resource_id": "T-002",
+        "span_end": 653,
+        "span_start": 449,
+        "travel_km": 59.084,
+        "travel_minutes": 90,
+        "utilization": 0.7353,
+        "worked_minutes": 150
+      },
+      {
+        "assigned_tasks": 4,
+        "idle_minutes": 0,
+        "operating_cost": 200.0,
+        "resource_id": "T-003",
+        "span_end": 699,
+        "span_start": 499,
+        "travel_km": 48.422,
+        "travel_minutes": 60,
+        "utilization": 1.0,
+        "worked_minutes": 200
+      },
+      {
+        "assigned_tasks": 4,
+        "idle_minutes": 63,
+        "operating_cost": 159.84,
+        "resource_id": "T-004",
+        "span_end": 693,
+        "span_start": 445,
+        "travel_km": 26.875,
+        "travel_minutes": 47,
+        "utilization": 0.746,
+        "worked_minutes": 185
+      },
+      {
+        "assigned_tasks": 0,
+        "idle_minutes": 0,
+        "operating_cost": 0.0,
+        "resource_id": "T-005",
+        "span_end": null,
+        "span_start": null,
+        "travel_km": 0.0,
+        "travel_minutes": 0,
+        "utilization": 0.0,
+        "worked_minutes": 0
+      },
+      {
+        "assigned_tasks": 4,
+        "idle_minutes": 87,
+        "operating_cost": 159.133,
+        "resource_id": "V-006",
+        "span_end": 696,
+        "span_start": 469,
+        "travel_km": 135.241,
+        "travel_minutes": 96,
+        "utilization": 0.6167,
+        "worked_minutes": 140
+      },
+      {
+        "assigned_tasks": 4,
+        "idle_minutes": 36,
+        "operating_cost": 43.217,
+        "resource_id": "V-007",
+        "span_end": 601,
+        "span_start": 465,
+        "travel_km": 68.104,
+        "travel_minutes": 69,
+        "utilization": 0.7353,
+        "worked_minutes": 100
+      },
+      {
+        "assigned_tasks": 0,
+        "idle_minutes": 0,
+        "operating_cost": 0.0,
+        "resource_id": "V-008",
+        "span_end": null,
+        "span_start": null,
+        "travel_km": 0.0,
+        "travel_minutes": 0,
+        "utilization": 0.0,
+        "worked_minutes": 0
+      }
+    ],
+    "violations": [
+      {
+        "amount": 50.0,
+        "detail": "finishes 10:07, 50 min after deadline 09:17",
+        "kind": "DEADLINE_MISSED",
+        "resource_id": "T-001",
+        "severity": 1,
+        "task_id": "T-024"
+      },
+      {
+        "amount": 49.0,
+        "detail": "finishes 11:50, 49 min after deadline 11:01",
+        "kind": "DEADLINE_MISSED",
+        "resource_id": "T-001",
+        "severity": 1,
+        "task_id": "T-017"
+      },
+      {
+        "amount": 35.0,
+        "detail": "finishes 08:49, 35 min after deadline 08:14",
+        "kind": "DEADLINE_MISSED",
+        "resource_id": "T-003",
+        "severity": 1,
+        "task_id": "T-025"
+      },
+      {
+        "amount": 27.0,
+        "detail": "finishes 11:19, 27 min after deadline 10:52",
+        "kind": "DEADLINE_MISSED",
+        "resource_id": "T-003",
+        "severity": 1,
+        "task_id": "T-007"
+      },
+      {
+        "amount": 30.0,
+        "detail": "finishes 08:25, 30 min after deadline 07:55",
+        "kind": "DEADLINE_MISSED",
+        "resource_id": "T-004",
+        "severity": 1,
+        "task_id": "T-001"
+      },
+      {
+        "amount": 24.0,
+        "detail": "finishes 10:23, 24 min after deadline 09:59",
+        "kind": "DEADLINE_MISSED",
+        "resource_id": "V-006",
+        "severity": 1,
+        "task_id": "T-015"
+      },
+      {
+        "amount": 1.0,
+        "detail": "finishes 08:15, 1 min after deadline 08:14",
+        "kind": "DEADLINE_MISSED",
+        "resource_id": "V-007",
+        "severity": 1,
+        "task_id": "T-021"
+      }
+    ]
+  },
+  "provenance": {
+    "export_schema": "orion.export/1",
+    "git_commit": "8258d3c9545b8cf29b70551e193ce8ce859d5108",
+    "kind": "plan",
+    "objective_weights": {
+      "w_completion": 10.0,
+      "w_cost": 0.01,
+      "w_dispatch": 0.05,
+      "w_late": 0.4,
+      "w_move_idle": 0.02,
+      "w_overload": 0.5,
+      "w_priority": 2.0,
+      "w_travel": 0.02,
+      "w_violation": 50.0
+    },
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.7",
+    "seed": 2026,
+    "source": "demo:SCN-orion-medium-2026"
+  }
+}

@@ -19,13 +19,39 @@ from orion.domain.plans import Plan, SolverName
 
 @dataclass(frozen=True, slots=True)
 class MetricRow:
-    """One metric with a human label, value and unit."""
+    """One metric with a human label, value and unit.
+
+    ``value`` is always the *raw* fraction in ``[0, 1]`` for fractional metrics,
+    so downstream code never has to guess the scale. ``unit`` is a display hint:
+    ``"%"`` means "render this fraction as a percentage". :attr:`display` is the
+    only place the conversion happens, which is what keeps a report's
+    percentages and a figure's percentages in agreement.
+    """
 
     key: str
     label: str
     value: float
     unit: str = ""
     higher_is_better: bool | None = None
+
+    @property
+    def is_fraction(self) -> bool:
+        return self.unit == "%"
+
+    @property
+    def display(self) -> str:
+        """Human-readable rendering of the value."""
+        if self.unit == "%":
+            return f"{self.value * 100:,.1f}%"
+        if self.unit == "min":
+            return f"{self.value:,.1f} min"
+        if self.unit == "km":
+            return f"{self.value:,.2f} km"
+        if self.unit == "s":
+            return f"{self.value:,.3f} s"
+        if self.unit:
+            return f"{self.value:,.2f} {self.unit}"
+        return f"{self.value:,.2f}"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -34,6 +60,7 @@ class MetricRow:
             "value": self.value,
             "unit": self.unit,
             "higher_is_better": self.higher_is_better,
+            "display": self.display,
         }
 
 

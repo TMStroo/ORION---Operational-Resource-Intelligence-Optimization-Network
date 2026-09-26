@@ -17,7 +17,7 @@ from typing import Any, Mapping, Sequence
 
 from orion.domain.entities import ObjectiveWeights
 from orion.domain.errors import ConfigError
-from orion.domain.plans import SolverName
+from orion.optimization.registry import ALL_SOLVERS, SOLVER_INDEX
 
 DIFFICULTY_LEVELS = ("small", "medium", "large", "stress")
 SPLITS = ("dev", "val", "eval")
@@ -147,10 +147,10 @@ class ExperimentConfig:
             b.validate()
         if not self.solvers:
             raise ConfigError("at least one solver must be configured")
-        unknown = [s for s in self.solvers if s not in {m.name for m in SolverName}]
+        unknown = [s for s in self.solvers if s not in SOLVER_INDEX]
         if unknown:
             raise ConfigError(
-                f"unknown solver(s) {unknown}; available: {sorted(m.name for m in SolverName)}"
+                f"unknown solver(s) {unknown}; available: {sorted(ALL_SOLVERS)}"
             )
         if not self.time_budgets:
             raise ConfigError("at least one time budget must be configured")
@@ -164,8 +164,9 @@ class ExperimentConfig:
         if self.seed < 0:
             raise ConfigError("seed must be >= 0")
 
-    def solver_enums(self) -> tuple[SolverName, ...]:
-        return tuple(SolverName[s] for s in self.solvers)
+    def solver_names(self) -> tuple[str, ...]:
+        """Validated solver names, in config order."""
+        return tuple(self.solvers)
 
     def weights(self) -> ObjectiveWeights:
         return self.objective_weights or ObjectiveWeights()

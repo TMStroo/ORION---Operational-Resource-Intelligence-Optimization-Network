@@ -1,0 +1,12 @@
+# provenance: {"export_schema": "orion.export/1", "git_commit": "8258d3c9545b8cf29b70551e193ce8ce859d5108", "kind": "plan_comparison", "objective_weights": {"w_completion": 10.0, "w_cost": 0.01, "w_dispatch": 0.05, "w_late": 0.4, "w_move_idle": 0.02, "w_overload": 0.5, "w_priority": 2.0, "w_travel": 0.02, "w_violation": 50.0}, "platform": "Windows-11-10.0.26200-SP0", "python_version": "3.14.7", "seed": 2026, "source": "demo:SCN-orion-medium-2026"}
+metric,baseline,candidate,change,unit,higher_is_better
+Plan score,285.865543,289.363088,+3.497545,,true
+Service level,0.845304,0.856354,+0.011050,,true
+Tasks assigned,21.000000,21.000000,+0.000000,,true
+Late tasks,7.000000,7.000000,+0.000000,,false
+Travel (km),333.146400,414.121200,+80.974800, km,false
+Operating cost,942.305000,897.140000,-45.165000,,false
+Mean utilisation,0.813643,0.768416,-0.045227,,true
+Violations,7.000000,7.000000,+0.000000,,false
+Solver runtime (s),0.002121,0.351548,+0.349427, s,false
+Assignments changed,21,21,7,count,false

@@ -243,19 +243,37 @@ class Disruption:
 # ==========================================================================
 # Handlers - one per disruption type
 # ==========================================================================
+def _blocked_window(resource: Any, start: int, end: int) -> Interval | None:
+    """The part of ``[start, end)`` that falls inside the resource's own shift.
+
+    ``Resource`` validation rejects an unavailable block longer than the shift,
+    so a block derived from the *scenario* horizon is invalid whenever the
+    resource works a shorter shift than the horizon. Intersecting here means a
+    disruption only removes time the resource was ever going to be on duty -
+    which is also the semantically correct reading: a vehicle that fails at
+    03:00 is not "unavailable" for hours it was never rostered to work.
+
+    Returns ``None`` when the window misses the shift entirely, so the caller
+    can skip adding a redundant interval.
+    """
+    lo = max(int(start), int(resource.shift_start))
+    hi = min(int(end), int(resource.shift_end))
+    if hi <= lo:
+        return None
+    return Interval(lo, hi)
+
+
 def _apply_vehicle_failure(scenario: Scenario, disruption: Disruption) -> Scenario:
     """Vehicle fails: unusable for the remainder of the horizon."""
     target = disruption.target_id
     assert target is not None
     resource = _require_resource(scenario, target)
+    window = _blocked_window(resource, disruption.timestamp, scenario.horizon.end)
     failed = replace(
         resource,
         status=ResourceStatus.FAILED,
         unavailable=tuple(
-            sorted(
-                set(resource.unavailable)
-                | {Interval(disruption.timestamp, scenario.horizon.end)}
-            )
+            sorted(set(resource.unavailable) | ({window} if window else set()))
         ),
     )
     out = scenario.with_resource(failed)
@@ -274,9 +292,10 @@ def _apply_resource_unavailable(scenario: Scenario, disruption: Disruption) -> S
         if disruption.duration
         else scenario.horizon.end
     )
+    window = _blocked_window(resource, disruption.timestamp, end)
     blocked = replace(
         resource,
-        unavailable=tuple(sorted(set(resource.unavailable) | {Interval(disruption.timestamp, end)})),
+        unavailable=tuple(sorted(set(resource.unavailable) | ({window} if window else set()))),
     )
     return scenario.with_resource(blocked).with_metadata(
         last_disruption=disruption.id, last_disruption_type=disruption.type

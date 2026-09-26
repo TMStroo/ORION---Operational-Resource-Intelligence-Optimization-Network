@@ -38,7 +38,7 @@ from orion.data.benchmark_adapters import (
     solomon_to_scenario,
 )
 from orion.data.scenario_generator import difficulty_config, generate
-from orion.domain.plans import Plan, SolverName
+from orion.domain.plans import Plan
 from orion.evaluation.metrics import (
     FailureCategory,
     FailureRecord,
@@ -92,7 +92,7 @@ def dataclass_replace(obj: Any, **kwargs: Any) -> Any:
 
 def run_single(
     scenario: Any,
-    solver: SolverName,
+    solver: str,
     time_budget_s: float,
     *,
     seed: int,
@@ -102,7 +102,7 @@ def run_single(
 ) -> tuple[Plan, list[FailureRecord]]:
     """Solve one (scenario, solver, budget) triple and record the outcome."""
     planner = Planner(
-        default_solver=solver.name,
+        default_solver=solver,
         default_time_budget=time_budget_s,
         seed=seed,
     )
@@ -112,7 +112,7 @@ def run_single(
     run = RunRecord(
         benchmark=benchmark,
         instance=instance,
-        solver=solver.name,
+        solver=solver,
         time_budget_s=time_budget_s,
         seed=seed,
         status=str(plan.status),
@@ -168,7 +168,7 @@ def run_scalability(
         sc_cfg = difficulty_config(level, seed=cfg.seed, maintenance_count=cfg.scenario.maintenance_count)
         scenario = generate(sc_cfg, weights=cfg.weights())
         split = SYNTHETIC_SPLIT[level]
-        for solver in cfg.solver_enums():
+        for solver in cfg.solver_names():
             for budget in cfg.time_budgets:
                 with timer.time("solve"):
                     plan, records, run = run_single(
@@ -180,7 +180,7 @@ def run_scalability(
                     "level": level,
                     "num_tasks": len(scenario.tasks),
                     "num_resources": len(scenario.resources),
-                    "solver": solver.name,
+                    "solver": solver,
                     "time_budget_s": budget,
                     "status": str(plan.status),
                     "objective": plan.objective.total,
@@ -225,7 +225,7 @@ def run_time_budget(
     budgets = (1.0, 5.0, 10.0, 30.0, 60.0)
     rows: list[dict[str, Any]] = []
     failures: list[FailureRecord] = []
-    for solver in cfg.solver_enums():
+    for solver in cfg.solver_names():
         for budget in budgets:
             plan, records, run = run_single(
                 scenario, solver, budget,
@@ -234,7 +234,7 @@ def run_time_budget(
             )
             store.add_run(directory, run)
             rows.append({
-                "solver": solver.name,
+                "solver": solver,
                 "time_budget_s": budget,
                 "status": str(plan.status),
                 "objective": plan.objective.total,
@@ -277,7 +277,7 @@ def run_constraint_pressure(
                 deadline_tightness=tightness,
             )
             scenario = generate(sc_cfg, weights=cfg.weights())
-            solver = cfg.solver_enums()[0]
+            solver = cfg.solver_names()[0]
             plan, records, run = run_single(
                 scenario, solver, cfg.time_budgets[0],
                 seed=cfg.seed, split="eval", benchmark="synthetic",
@@ -332,7 +332,7 @@ def run_disruption_stress(
                 seed=cfg.seed,
             )
             baseline = planner.plan(scenario, explain=False).plan
-            SimulationEngine(scenario, baseline).build_trace()
+            SimulationEngine(scenario, baseline).run()
             disruptions = generate_disruptions(
                 scenario, rate=rate, severity=severity, seed=cfg.disruption.seed
             )
@@ -414,7 +414,7 @@ def run_solver_comparison(
                 severity=1,
             ))
             continue
-        for solver in cfg.solver_enums():
+        for solver in cfg.solver_names():
             for budget in cfg.time_budgets:
                 plan, records, run = run_single(
                     scenario, solver, budget,
@@ -426,7 +426,7 @@ def run_solver_comparison(
                     "benchmark": benchmark.name,
                     "dataset": benchmark.dataset,
                     "instance": run.instance,
-                    "solver": solver.name,
+                    "solver": solver,
                     "time_budget_s": budget,
                     "status": str(plan.status),
                     "objective": plan.objective.total,

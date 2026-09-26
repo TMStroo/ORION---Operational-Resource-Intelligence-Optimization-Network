@@ -307,7 +307,13 @@ class WhatIfEngine:
                 modified, description = WHAT_IF_OPERATORS[operator](scenario, value)
             else:
                 modified, description = WHAT_IF_OPERATORS[operator](scenario, value)
-            question = WHAT_IF_DESCRIPTIONS[operator].replace("X", f"{value:g}")
+            # Every operator takes a *fraction* (0.15 == 15 %), but the question
+            # templates are written in percent. Substituting the raw fraction
+            # produced "deadlines become 0.15% tighter", so scale here. The one
+            # exception is travel_increase, whose parameter is a multiplier
+            # (1.25 == "by factor 1.25"), not a percentage.
+            shown = f"{value:.2f}".rstrip("0").rstrip(".") if operator == "travel_increase" else f"{value * 100:g}"
+            question = WHAT_IF_DESCRIPTIONS[operator].replace("X", shown)
 
         result = self.planner.plan(
             modified,

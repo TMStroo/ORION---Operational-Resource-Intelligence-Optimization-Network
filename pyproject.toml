@@ -60,7 +60,7 @@ dev = [
 postgres = ["psycopg2-binary>=2.9"]
 
 [project.scripts]
-orion = "orion.cli.main:cli"
+orion = "orion.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "backend/src" }

@@ -125,7 +125,7 @@ def cmd_simulate(args: argparse.Namespace) -> int:
     cfg = _load_config(args.config)
     scenario = _load_scenario(args.scenario or cfg.scenario.level)
     plan = Planner(default_solver=cfg.solvers[0], default_time_budget=cfg.time_budgets[0], seed=cfg.seed).plan(scenario).plan
-    result = SimulationEngine(scenario, plan).build_trace()
+    result = SimulationEngine(scenario, plan).run()
     print(f"simulation: {result.summary_line()}")
     for event in result.trace[: args.limit]:
         print(f"  {event.time:4d} {event.type.name:16s} {event.subject_id or ''} {event.detail}")

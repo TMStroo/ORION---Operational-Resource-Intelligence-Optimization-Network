@@ -232,8 +232,15 @@ class LocalRepairer:
                 continue
             survivors[assignment.resource_id].append(assignment.task_id)
 
-        for resource_id in survivors:
-            survivors[resource_id].sort()
+        # Keep each survivor list in the order the previous plan actually ran
+        # it. Sorting by task id here (which an earlier version did) rearranges
+        # the route alphabetically, and because time windows and dependencies
+        # are order-sensitive the rebuilt sequence is usually infeasible - the
+        # whole resource then dropped out of the repaired plan even though
+        # nothing about it had changed. The previous plan's start times are the
+        # authoritative order.
+        for resource_id in list(survivors):
+            survivors[resource_id] = self._order_as_previous(survivors[resource_id], previous)
 
         pending = sorted(affected, key=lambda tid: self._order_key(tid, context))
 
@@ -318,6 +325,16 @@ class LocalRepairer:
             return False
         return True
 
+    @staticmethod
+    def _order_as_previous(task_ids: Sequence[str], previous: Any) -> list[str]:
+        """Sort *task_ids* by the start time they had in *previous*.
+
+        Tasks absent from the previous plan (introduced by the disruption) keep a
+        deterministic order derived from the id, so the result is stable.
+        """
+        starts = {a.task_id: a.start for a in previous.assignments}
+        return sorted(task_ids, key=lambda tid: (starts.get(tid, 1 << 30), tid))
+
     def _materialise(
         self,
         context: SchedulingContext,
@@ -332,13 +349,28 @@ class LocalRepairer:
 
         first = dependency_bounds(context, sequences)
         assignments: list[Assignment] = []
+        # A resource whose rebuilt sequence does not fit must not be dropped
+        # wholesale: that silently deleted unaffected work. Instead keep the
+        # longest feasible prefix of the route, so only the genuinely
+        # unschedulable tail is lost, and record why.
+        dropped: list[str] = []
         for resource_id in sorted(sequences):
-            if not sequences[resource_id]:
+            sequence = sequences[resource_id]
+            if not sequence:
                 continue
-            result = schedule_sequence(
-                sequences[resource_id], context, resource_id, external_bounds=first
-            )
-            if result is not None:
+            result = schedule_sequence(sequence, context, resource_id, external_bounds=first)
+            if result is None:
+                kept: list[Assignment] = []
+                for length in range(len(sequence) - 1, 0, -1):
+                    head = sequence[:length]
+                    first = dependency_bounds(context, {**sequences, resource_id: head})
+                    result = schedule_sequence(head, context, resource_id, external_bounds=first)
+                    if result is not None:
+                        kept = result
+                        break
+                assignments.extend(kept)
+                dropped.extend(sequence[len(kept) :])
+            else:
                 assignments.extend(result)
         run = SolverRun(
             solver="LOCAL_REPAIR",
@@ -364,12 +396,20 @@ class LocalRepairer:
                 reason="repair produced a plan with hard constraint violations",
             )
         unrecovered = tuple(t for t in pending if t not in set(recovered))
+        if dropped:
+            reason_extra = (
+                f"; {len(dropped)} unschedulable tail task(s) dropped: "
+                f"{', '.join(dropped[:5])}"
+            )
+        else:
+            reason_extra = ""
         return RepairOutcome(
             plan=plan,
             recovered_tasks=tuple(recovered),
             unrecovered_tasks=unrecovered,
             strategy=strategy,
             seconds=time.perf_counter() - started,
+            reason=reason_extra,
             candidates_considered=candidates,
         )
 

@@ -1,0 +1,126 @@
+{
+  "scenario_id": "SCN-orion-medium-2026",
+  "output_dir": "results\\demo",
+  "baseline_score": 301.03374326513534,
+  "baseline_service": 0.8895027624309392,
+  "degraded_score": 230.74464701131274,
+  "repaired_score": 285.86554277794386,
+  "full_score": 289.36308752529646,
+  "repair_seconds": 0.0062095999892335385,
+  "full_seconds": 0.35222800000337884,
+  "recovery_pct": 83.78378378378382,
+  "churn_changed": 5,
+  "churn_total": 22,
+  "affected_tasks": 5,
+  "surge_recovered": 3,
+  "whatif_delta": -0.08591720289695104,
+  "artifacts": [
+    "results\\demo\\scenario.json",
+    "results\\demo\\baseline_metrics.csv",
+    "results\\demo\\simulation_events.csv",
+    "results\\demo\\repaired_plan.json",
+    "results\\demo\\full_reoptimized_plan.json",
+    "results\\demo\\repair_vs_full.csv",
+    "results\\demo\\baseline_plan.json"
+  ],
+  "stages": [
+    {
+      "number": 1,
+      "title": "Scenario created and validated",
+      "facts": [
+        "25 tasks, 8 resources (5 teams / 3 vehicles)",
+        "horizon [00:00-12:00)  demand 1185 min  available 2325 min",
+        "capabilities ['crane_heavy', 'electrical', 'hazmat', 'heavy_lift', 'hvac', 'network', 'plumbing', 'refrigerated', 'structural', 'transport', 'vehicle', 'water_treatment']",
+        "static feasibility: FEASIBLE"
+      ],
+      "seconds": 0.0011220000160392374
+    },
+    {
+      "number": 2,
+      "title": "Baseline plan generated",
+      "facts": [
+        "PLAN-0002 [FEASIBLE] score=301.03 assigned=22/25 late=7 travel=385.0km solver=LOCAL_SEARCH",
+        "Plan score: 301.03",
+        "Service level: 89.0%",
+        "Task completion rate: 88.0%",
+        "Deadline violation rate: 31.8%",
+        "Mean lateness: 10.4 min",
+        "Travel distance: 384.98 km",
+        "Operating cost: 865.75 cost",
+        "Mean utilisation: 78.2%",
+        "T-024 -> T-001: required_skills=ok(2/2); capacity=ok(n/a); availability=ok(441-720); maintenance=ok(0 block(s)); deadline=FAIL(ends 607, due 557); travel=ok(48.4 km / 76 min); priority=ok(Low) | objective +9.49 | alternative V-008: -19.5 km, -1.08 cost",
+        "explanations attached: 22"
+      ],
+      "seconds": 0.4211399000196252
+    },
+    {
+      "number": 3,
+      "title": "Simulation executed",
+      "facts": [
+        "sim 0-697 (00:00-11:37): 22 completed, 7 late, 0 failed, 0 replan(s), 66 events",
+        "first events: 06:56 TASK_ARRIVE | 07:09 TASK_ARRIVE | 07:14 TASK_ARRIVE"
+      ],
+      "seconds": 0.00041439998312853277
+    },
+    {
+      "number": 4,
+      "title": "Disruption injected: V-008 fails at 03:00",
+      "facts": [
+        "affected tasks: 5",
+        "T-021 [07:32-08:02], T-002 [08:02-08:47], T-015 [08:48-09:18], T-013 [10:43-11:03], T-014 [11:03-11:23]"
+      ],
+      "seconds": 0.0001829999964684248
+    },
+    {
+      "number": 5,
+      "title": "Local repair",
+      "facts": [
+        "strategy: sequential  candidates considered: 24",
+        "recovered 4 task(s) in 6.2 ms",
+        "unrecovered: ['T-013', 'T-018', 'T-006', 'T-005']  (4 task(s) could not be re-inserted without violating a hard constraint)",
+        "plan churn: 5/22 assignments changed, travel -51.8 km"
+      ],
+      "seconds": 0.3596160000015516
+    },
+    {
+      "number": 6,
+      "title": "Full re-optimization (for comparison)",
+      "facts": [
+        "PLAN-0007 [FEASIBLE] score=289.36 assigned=21/25 late=7 travel=414.1km solver=LOCAL_SEARCH",
+        "runtime 352.2 ms vs local repair 6.2 ms (57x slower)",
+        "churn 11/22 assignments changed",
+        "service: baseline 89.0% -> degraded 68.5% -> full 85.6%  (recovery 83.8%)"
+      ],
+      "seconds": 0.00024059999850578606
+    },
+    {
+      "number": 7,
+      "title": "Urgent demand surge: +8 high-priority tasks",
+      "facts": [
+        "replanned scenario: 33 tasks (was 25)",
+        "urgent tasks accepted into the plan: 3/8 (38%)",
+        "PLAN-0010 [FEASIBLE] score=324.08 assigned=23/33 late=10 travel=367.4km solver=LOCAL_SEARCH"
+      ],
+      "seconds": 0.48660460000974126
+    },
+    {
+      "number": 8,
+      "title": "What-if: deadlines 15% tighter",
+      "facts": [
+        "What if deadlines become 15% tighter?",
+        "modification: tightened 25/25 deadlines by 15% of their slack",
+        "baseline 301.03 -> scenario 300.95 (-0.09)",
+        "Plan score 301.0->300.9; Service level 0.9->0.9; Tasks assigned 22.0->22.0; Late tasks 7.0->6.0"
+      ],
+      "seconds": 0.35883119999198243
+    },
+    {
+      "number": 9,
+      "title": "Artifacts written",
+      "facts": [
+        "7 files under results\\demo"
+      ],
+      "seconds": 0.13759890000801533
+    }
+  ]
+}
