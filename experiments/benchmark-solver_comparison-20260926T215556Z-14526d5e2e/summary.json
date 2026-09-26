@@ -1,0 +1,57 @@
+{
+  "suite": "solver_comparison",
+  "rows": 24,
+  "wall_seconds": 213.2019,
+  "status_counts": {
+    "ERROR": 2,
+    "FEASIBLE": 6,
+    "NOT_APPLICABLE": 2,
+    "OPTIMAL": 2,
+    "RELAXATION_OPTIMAL": 4,
+    "TIME_LIMIT": 8
+  },
+  "numeric": {
+    "objective": {
+      "min": -382.0,
+      "median": 819.0310513333333,
+      "max": 1400.0,
+      "mean": 749.764995,
+      "n": 24
+    },
+    "runtime_s": {
+      "min": 0.0,
+      "median": 0.8821548999840161,
+      "max": 30.696892799984198,
+      "mean": 7.596947,
+      "n": 24
+    },
+    "service_level": {
+      "min": 0.0,
+      "median": 0.6464646464646464,
+      "max": 1.0,
+      "mean": 0.610076,
+      "n": 24
+    },
+    "late_tasks": {
+      "min": 0.0,
+      "median": 1.5,
+      "max": 58.0,
+      "mean": 16.333333,
+      "n": 24
+    },
+    "travel_km": {
+      "min": 0.0,
+      "median": 631.35475,
+      "max": 2311.981,
+      "mean": 573.8197,
+      "n": 24
+    },
+    "violations": {
+      "min": 0.0,
+      "median": 0.0,
+      "max": 6.0,
+      "mean": 0.5,
+      "n": 24
+    }
+  }
+}

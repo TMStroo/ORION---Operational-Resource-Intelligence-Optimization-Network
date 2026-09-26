@@ -1,0 +1,43 @@
+{
+  "failures": {
+    "deadline_collapse": {
+      "count": 11,
+      "worst_severity": 2,
+      "representative": {
+        "category": "deadline_collapse",
+        "scenario": "orion-medium",
+        "detail": "24/29 dispatched tasks are late",
+        "root_cause": "deadline slack too small relative to travel and duration",
+        "consequence": "service level collapses; the plan is technically feasible but useless",
+        "mitigation": "widen w_late or the time windows before trusting the plan",
+        "severity": 2
+      }
+    },
+    "solver_timeout": {
+      "count": 5,
+      "worst_severity": 1,
+      "representative": {
+        "category": "solver_timeout",
+        "scenario": "orion-large",
+        "detail": "no proven optimum within 5.0s",
+        "root_cause": "model size above the budget the planner allowed",
+        "consequence": "quality is unknown, not optimal",
+        "mitigation": "raise the time budget, or accept the FEASIBLE plan and raise a follow-up",
+        "severity": 1
+      }
+    },
+    "no_eligible_pair": {
+      "count": 2,
+      "worst_severity": 1,
+      "representative": {
+        "category": "no_eligible_pair",
+        "scenario": "orion-stress",
+        "detail": "solver MIN_COST_FLOW does not apply to this scenario: not applicable: scenario has task dependencies; the flow relaxation cannot represent precedence and is therefore not applicable",
+        "root_cause": "the scenario contains a constraint the solver's formulation cannot represent (MIN_COST_FLOW has no notion of precedence)",
+        "consequence": "no row for this solver at this size; not a solver failure",
+        "mitigation": "report the cell as not-applicable rather than as a score",
+        "severity": 1
+      }
+    }
+  }
+}

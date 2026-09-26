@@ -1,0 +1,49 @@
+{
+  "suite": "scalability",
+  "rows": 50,
+  "wall_seconds": 224.4994,
+  "status_counts": {
+    "FEASIBLE": 27,
+    "NOT_APPLICABLE": 2,
+    "OPTIMAL": 4,
+    "RELAXATION_OPTIMAL": 14,
+    "TIME_LIMIT": 3
+  },
+  "numeric": {
+    "objective": {
+      "min": 0.0,
+      "median": 328.05979713159786,
+      "max": 1492.1665460030515,
+      "mean": 364.024656,
+      "n": 50
+    },
+    "runtime_s": {
+      "min": 0.0,
+      "median": 0.11431250000896398,
+      "max": 30.297383299999638,
+      "mean": 3.940516,
+      "n": 50
+    },
+    "service_level": {
+      "min": 0.0,
+      "median": 0.6237762237762238,
+      "max": 1.0,
+      "mean": 0.588782,
+      "n": 50
+    },
+    "late_tasks": {
+      "min": 0.0,
+      "median": 6.0,
+      "max": 80.0,
+      "mean": 13.16,
+      "n": 50
+    },
+    "travel_km": {
+      "min": 0.0,
+      "median": 444.1853,
+      "max": 3279.6292,
+      "mean": 681.67296,
+      "n": 50
+    }
+  }
+}

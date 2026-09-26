@@ -1,0 +1,11 @@
+{
+  "stages_seconds": {
+    "solve": 258.89784720001626
+  },
+  "total_seconds": 258.89784720001626,
+  "measured_utc": "2026-09-26T23:04:30+00:00",
+  "suite_wall_seconds": 259.4081,
+  "solver_seconds": 234.9171,
+  "solver_fraction_of_wall": 0.9056,
+  "rows": 50
+}

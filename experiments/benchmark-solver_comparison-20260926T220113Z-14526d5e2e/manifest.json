@@ -1,0 +1,179 @@
+{
+  "experiment_id": "benchmark-solver_comparison-20260926T220113Z-14526d5e2e",
+  "created_utc": "2026-09-26T22:01:13+00:00",
+  "kind": "benchmark-solver_comparison",
+  "description": "Solver comparison and time-budget trade-off on public Solomon VRPTW instances and the synthetic operational suite, at matched budgets.",
+  "git_commit": "c17d5aa4f86ea0c310876555744ca2a301cf2796",
+  "python_version": "3.14.7",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "package_versions": {
+    "ortools": "9.15.6755",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "pandas": "3.0.6",
+    "fastapi": "0.141.1",
+    "pydantic": "2.13.5",
+    "matplotlib": "3.11.2"
+  },
+  "seeds": [
+    2026,
+    7
+  ],
+  "config": {
+    "kind": "benchmark",
+    "description": "Solver comparison and time-budget trade-off on public Solomon VRPTW instances and the synthetic operational suite, at matched budgets.",
+    "scenario": {
+      "level": "medium",
+      "seed": 2026,
+      "maintenance_count": 2,
+      "scarcity": 1.0,
+      "deadline_tightness": 0.5,
+      "dependency_rate": 0.15
+    },
+    "benchmarks": [
+      {
+        "name": "solomon-clustered",
+        "dataset": "solomon",
+        "instances": [
+          "c101",
+          "c201"
+        ],
+        "split": "eval",
+        "fleet_multiplier": 1.0
+      },
+      {
+        "name": "solomon-random",
+        "dataset": "solomon",
+        "instances": [
+          "r101",
+          "r201"
+        ],
+        "split": "eval",
+        "fleet_multiplier": 1.0
+      },
+      {
+        "name": "jobshop-ft10",
+        "dataset": "jobshop",
+        "instances": [
+          "ft10"
+        ],
+        "split": "val",
+        "fleet_multiplier": 1.0
+      }
+    ],
+    "solvers": [
+      "HEURISTIC",
+      "LOCAL_SEARCH",
+      "CP_SAT",
+      "MIN_COST_FLOW"
+    ],
+    "time_budgets": [
+      5.0,
+      30.0
+    ],
+    "disruption": {
+      "rate": 0.0,
+      "severity": "medium",
+      "seed": 7,
+      "kinds": [
+        "VEHICLE_FAILURE",
+        "RESOURCE_UNAVAILABLE",
+        "MAINTENANCE",
+        "DEMAND_SURGE",
+        "TRAVEL_INCREASE"
+      ],
+      "sample_per_rate": 4
+    },
+    "objective_weights": {
+      "w_completion": 10.0,
+      "w_priority": 2.0,
+      "w_late": 0.4,
+      "w_travel": 0.02,
+      "w_cost": 0.01,
+      "w_dispatch": 0.05,
+      "w_overload": 0.5,
+      "w_move_idle": 0.02,
+      "w_violation": 50.0
+    },
+    "weight_provenance": "reported",
+    "seed": 2026,
+    "output_dir": "experiments",
+    "results_dir": "results",
+    "figures_dir": "docs/figures",
+    "cache_dir": "data/cache",
+    "cache_results": true
+  },
+  "objective_weights": {
+    "w_completion": 10.0,
+    "w_priority": 2.0,
+    "w_late": 0.4,
+    "w_travel": 0.02,
+    "w_cost": 0.01,
+    "w_dispatch": 0.05,
+    "w_overload": 0.5,
+    "w_move_idle": 0.02,
+    "w_violation": 50.0
+  },
+  "config_hash": "0953412597c6207d7e8864c4969b9b7a2f29d1e6839f4b6709a5e827fc268f8f",
+  "schema_hash": "80f1347d64a10d64b1f543cb674ea2d3de6fff450d5be451b69fd9a40e4a0f67",
+  "dataset_checksums": {
+    "Solomon VRPTW (100-customer, SINTEF mirror)": "8a0a72cbe6b7f8f9988ace4ebde0378ec34943acaaac47f2c408915e41887747",
+    "OR-Library jobshop1 (Fisher & Thompson; Taillard; Lawrence; Adams et al.)": "recorded in the experiment manifest at download time"
+  },
+  "splits": {
+    "small": "dev",
+    "medium": "val",
+    "large": "eval",
+    "stress": "eval"
+  },
+  "runs": [
+    {
+      "benchmark": "solomon",
+      "instance": "c101",
+      "solver": "HEURISTIC",
+      "time_budget_s": 5.0,
+      "seed": 2026,
+      "status": "FEASIBLE",
+      "runtime_s": 0.3244164999923669,
+      "objective": 1358.5090153333333,
+      "service_level": 1.0,
+      "tasks_assigned": 99,
+      "late_tasks": 39,
+      "travel_km": 726.2159,
+      "operating_cost": 0.0,
+      "violations": 39,
+      "model_variables": 2475,
+      "model_constraints": 0,
+      "optimality_gap": null,
+      "split": "eval",
+      "notes": ""
+    },
+    {
+      "benchmark": "solomon",
+      "instance": "c101",
+      "solver": "HEURISTIC",
+      "time_budget_s": 30.0,
+      "seed": 2026,
+      "status": "FEASIBLE",
+      "runtime_s": 0.3317899999965448,
+      "objective": 1358.5090153333333,
+      "service_level": 1.0,
+      "tasks_assigned": 99,
+      "late_tasks": 39,
+      "travel_km": 726.2159,
+      "operating_cost": 0.0,
+      "violations": 39,
+      "model_variables": 2475,
+      "model_constraints": 0,
+      "optimality_gap": null,
+      "split": "eval",
+      "notes": ""
+    }
+  ],
+  "status": "superseded",
+  "completed_utc": null,
+  "superseded_utc": "2026-09-26T23:08:09+00:00",
+  "superseded_reason": "superseded by newer benchmark-solver_comparison run benchmark-solver_comparison-20260926T230445Z-bf748adf7e",
+  "superseded_by": null,
+  "schema_version": "orion.experiment/1"
+}
