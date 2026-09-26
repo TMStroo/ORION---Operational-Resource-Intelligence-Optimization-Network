@@ -133,6 +133,12 @@ class Manifest:
     runs: list[RunRecord] = field(default_factory=list)
     status: str = "running"
     completed_utc: str | None = None
+    #: Set only by `ExperimentStore.supersede`. A superseded experiment is kept
+    #: on disk as the record of a run that happened, but is no longer evidence:
+    #: figures and reports must filter on this.
+    superseded_utc: str | None = None
+    superseded_reason: str | None = None
+    superseded_by: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -303,6 +309,48 @@ class ExperimentStore:
             writer = csv.DictWriter(fh, fieldnames=fields)
             writer.writeheader()
             writer.writerows(rows)
+
+    def supersede(self, experiment_id: str, reason: str, *, replaced_by: str | None = None) -> Path:
+        """Mark a completed experiment as no longer live evidence.
+
+        An experiment directory is never deleted or rewritten - the record of
+        what was actually run stays on disk. What changes is its status, so any
+        report or figure generator that filters on status automatically stops
+        quoting it. This is how a run that turned out to rest on a bug is
+        retired without erasing the evidence that it was run.
+        """
+        directory = self.path_for(experiment_id)
+        manifest = self.load(experiment_id)
+        if manifest.status in ("superseded",):
+            return directory  # already retired; keep it idempotent
+        manifest.status = "superseded"
+        superseded_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        manifest.superseded_utc = superseded_utc
+        manifest.superseded_reason = reason
+        manifest.superseded_by = replaced_by
+        self._write_manifest(directory, manifest)
+        note = {
+            "status": "superseded",
+            "reason": reason,
+            "replaced_by": replaced_by,
+            "superseded_utc": superseded_utc,
+            "note": (
+                "This directory is retained as a historical record of a run that "
+                "was executed. It must not be quoted as evidence."
+            ),
+        }
+        (directory / "SUPERSEDED.json").write_text(
+            json.dumps(note, indent=2, allow_nan=False, default=str), encoding="utf-8"
+        )
+        return directory
+
+    def live(self) -> list[str]:
+        """Ids of experiments that are still valid evidence."""
+        return [
+            eid
+            for eid in self.list_ids()
+            if self.load(eid).status not in ("superseded", "failed")
+        ]
 
     def finish(
         self,

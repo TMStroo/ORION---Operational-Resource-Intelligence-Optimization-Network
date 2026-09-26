@@ -303,23 +303,39 @@ def run_solver(
         )
 
     if not getattr(instance, "supports", lambda _c: True)(context):
-            checker = getattr(instance, "unsupported_reason", None)
-            reason = checker(context) if callable(checker) else "solver not applicable to this scenario"
-            return SolveResult(
-                solver=name,
-                plan=Plan(id=plan_id or "PLAN-NA", scenario_id=context.scenario.id, assignments=()),
-                run=SolverRun(
-                    solver=name,
-                    status=SolverStatus.NOT_APPLICABLE,
-                    runtime_s=0.0,
-                    objective=0.0,
-                    feasible=False,
-                    notes=f"not applicable: {reason}",
-                ),
-                diagnostics={},
-                applicable=False,
-                reason=reason,
-            )
+        checker = getattr(instance, "unsupported_reason", None)
+        reason = checker(context) if callable(checker) else "solver not applicable to this scenario"
+        # The declined run is attached to the plan as a real SolverRun. Without
+        # this the plan carried an empty `solver_runs`, so downstream code saw an
+        # empty plan whose own status field read FEASIBLE and recorded a score of
+        # 0.0 for a solver that had explicitly declined the instance. "Not
+        # applicable" has to be visible in the plan, not only in a warning string.
+        declined_run = SolverRun(
+            solver=name,
+            status=SolverStatus.NOT_APPLICABLE,
+            runtime_s=0.0,
+            objective=0.0,
+            feasible=False,
+            notes=f"not applicable: {reason}",
+        )
+        return SolveResult(
+            solver=name,
+            plan=Plan(
+                id=plan_id or "PLAN-NA",
+                scenario_id=context.scenario.id,
+                assignments=(),
+                solver_runs=(declined_run,),
+                status=SolverStatus.NOT_APPLICABLE,
+                strategy=name,
+                tasks_total=len(context.scenario.tasks),
+                service_level=0.0,
+                metadata={"not_applicable_reason": reason},
+            ),
+            run=declined_run,
+            diagnostics={},
+            applicable=False,
+            reason=reason,
+        )
 
     try:
         assignments, run, diagnostics = instance.solve(context, request)

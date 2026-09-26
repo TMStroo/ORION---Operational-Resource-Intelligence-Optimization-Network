@@ -1,0 +1,40 @@
+{
+  "suite": "time_budget",
+  "rows": 20,
+  "wall_seconds": 5.4673,
+  "status_counts": {
+    "FEASIBLE": 10,
+    "OPTIMAL": 5,
+    "RELAXATION_OPTIMAL": 5
+  },
+  "numeric": {
+    "objective": {
+      "min": 155.0476125702219,
+      "median": 323.98177733818574,
+      "max": 325.7717689697245,
+      "mean": 282.195734,
+      "n": 20
+    },
+    "runtime_s": {
+      "min": 0.0012241000076755881,
+      "median": 0.172935549999238,
+      "max": 0.7937312999856658,
+      "mean": 0.25704,
+      "n": 20
+    },
+    "service_level": {
+      "min": 0.4486486486486487,
+      "median": 0.9243243243243243,
+      "max": 0.9243243243243243,
+      "mean": 0.805405,
+      "n": 20
+    },
+    "late_tasks": {
+      "min": 1.0,
+      "median": 6.5,
+      "max": 8.0,
+      "mean": 5.5,
+      "n": 20
+    }
+  }
+}

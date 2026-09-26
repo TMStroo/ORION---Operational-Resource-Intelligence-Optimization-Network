@@ -69,7 +69,7 @@ from orion.optimization.models import (
     dependency_bounds,
     schedule_sequence,
 )
-from orion.optimization.objective import task_value
+from orion.optimization.objective import resource_cost, task_value
 
 try:  # pragma: no cover
     from ortools.graph.python import min_cost_flow
@@ -141,11 +141,23 @@ def build_flow_network(
         tasks[index].id for index in range(len(tasks)) if index not in servable_set
     )
 
+    weights = context.scenario.objective_weights
+    # Shortest worked duration anywhere in the instance, used to convert the
+    # minute-denominated work limit into task units for the capacity arcs.
+    durations = [
+        pair.duration
+        for index, task in enumerate(tasks)
+        if index in servable_set
+        for resource in resources
+        for pair in (context.pair(task.id, resource.id),)
+        if pair is not None
+    ]
+    min_task_minutes = min(durations) if durations else 1
     for index, task in enumerate(tasks):
         if index not in servable_set:
             continue  # no eligible resource: the node is deliberately left isolated
         task_node = task_base + index
-        value = task_value(task, context.scenario.objective_weights).total
+        value = task_value(task, weights).total
         # reward for serving this task: a negative arc cost from the source
         smf.add_arc_with_capacity_and_unit_cost(
             source, task_node, 1, -int(round(value * COST_SCALE))
@@ -155,26 +167,54 @@ def build_flow_network(
             if pair is None:
                 continue
             resource_node = resource_base + r_index
-            cost_per_minute = resource.operating_cost_per_hour / 60.0
-            arc_cost = int(round(cost_per_minute * pair.duration * COST_SCALE))
+            # The task->resource arc carries exactly the penalty terms that ORION's
+            # objective charges for that assignment, in the objective's own units:
+            #
+            #   w_cost   * operating_cost_per_hour * (worked_minutes / 60)
+            #   w_travel * (travel_km / speed_factor)
+            #
+            # The weights are not optional scaling. Without them the reward for a
+            # served task is 10-18 weighted points while the far-depot travel cost
+            # was entering the network as raw kilometres, so on Solomon C101 88 of
+            # 99 customers had a negative net value and the relaxation "served"
+            # 4 of them. The relaxation was not making a scheduling decision, it
+            # was comparing quantities in different currencies.
+            cost_term = weights.w_cost * resource_cost(resource, pair.duration)
+            arc_cost = cost_term * COST_SCALE
             if include_travel:
-                arc_cost += int(round(
-                    context.distance_between(
+                arc_cost += (
+                    weights.w_travel
+                    * context.distance_between(
                         resource.home_location, task.location, resource.speed_factor
-                    ) * COST_SCALE
-                ))
-            arc = smf.add_arc_with_capacity_and_unit_cost(task_node, resource_node, 1, arc_cost)
+                    )
+                ) * COST_SCALE
+            arc = smf.add_arc_with_capacity_and_unit_cost(
+                task_node, resource_node, 1, int(round(arc_cost))
+            )
             handles.setdefault("task_resource_arcs", []).append(
                 (index, r_index, arc)
             )
 
     for r_index, resource in enumerate(resources):
         resource_node = resource_base + r_index
-        # capacity arc: total worked minutes on this resource, scaled so that
-        # integer minutes map onto integer flow
-        limit = max(1, resource.max_work_minutes)
-        smf.add_arc_with_capacity_and_unit_cost(resource_node, sink, limit, 0)
-
+        # Capacity of this resource, expressed in TASK UNITS.
+        #
+        # The task->resource arcs carry one unit of flow per task, but the work
+        # limit is denominated in minutes. Those are different units, and the arc
+        # used to mix them: it was given `max_work_minutes` (1281) while each
+        # task consumed 1, so the limit never bound and the flow piled all 99
+        # Solomon C101 customers onto a single vehicle. Sequencing then truncated
+        # that one route to the 4 tasks that fit its shift, which is why the
+        # relaxation appeared to "serve 4 of 99" for a reason that had nothing to
+        # do with the relaxation.
+        #
+        # Dividing the minute limit by the shortest task duration in the instance
+        # gives the largest task count that could possibly fit, so it is a true
+        # upper bound: it can only be too generous, never too tight. Generosity is
+        # the correct direction of error for a relaxation - it can never rule out
+        # an assignment the real problem would allow.
+        slots = max(1, resource.max_work_minutes // max(1, min_task_minutes))
+        smf.add_arc_with_capacity_and_unit_cost(resource_node, sink, slots, 0)
     return smf, handles
 
 
@@ -291,7 +331,7 @@ class MinCostFlowSolver:
         started = time.perf_counter()
         # the flow allocation is unordered; sequence each resource by value and
         # deadline, then apply cross-resource dependency bounds
-        from orion.optimization.objective import task_value as _tv
+        from orion.optimization.objective import resource_cost, task_value as _tv
 
         weights = context.scenario.objective_weights
         for resource_id, task_ids in allocation.items():
@@ -354,7 +394,7 @@ class MinCostFlowSolver:
         task_ids: Sequence[str], context: SchedulingContext, resource_id: str
     ) -> list[Assignment]:
         """Longest feasible prefix of the allocation, ordered by value."""
-        from orion.optimization.objective import task_value
+        from orion.optimization.objective import resource_cost, task_value
 
         ordered = sorted(
             task_ids,

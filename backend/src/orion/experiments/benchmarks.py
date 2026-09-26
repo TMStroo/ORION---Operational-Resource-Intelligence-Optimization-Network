@@ -39,6 +39,7 @@ from orion.data.benchmark_adapters import (
 )
 from orion.data.scenario_generator import difficulty_config, generate
 from orion.domain.plans import Plan
+from orion.domain.plans import SolverStatus
 from orion.evaluation.metrics import (
     FailureCategory,
     FailureRecord,
@@ -116,6 +117,48 @@ def run_single(
     # result. An empty plan from a solver that reports success is legitimate
     # (a genuinely infeasible instance), so the distinction is made on the
     # solver's reported status, not on emptiness.
+    # Report the status the *solver* returned, not the plan's own status field.
+    # A solver that declines a scenario (MIN_COST_FLOW cannot represent
+    # precedence) produces an empty plan whose status reads FEASIBLE, which put
+    # a "0.00 objective, FEASIBLE" row into the 250-task table. A run that
+    # produced no solution must say so.
+    declined = [r for r in plan.solver_runs if r.status == SolverStatus.NOT_APPLICABLE]
+    if declined:
+        return plan, [
+            FailureRecord(
+                FailureCategory.NO_ELIGIBLE_PAIR,
+                scenario.name,
+                f"solver {declined[0].solver} does not apply to this scenario: {declined[0].notes}",
+                root_cause=(
+                    "the scenario contains a constraint the solver's formulation "
+                    "cannot represent (MIN_COST_FLOW has no notion of precedence)"
+                ),
+                consequence="no row for this solver at this size; not a solver failure",
+                mitigation="report the cell as not-applicable rather than as a score",
+                severity=1,
+            )
+        ], RunRecord(
+            benchmark=benchmark,
+            instance=instance,
+            solver=solver,
+            time_budget_s=time_budget_s,
+            seed=seed,
+            status=SolverStatus.NOT_APPLICABLE,
+            runtime_s=max((r.runtime_s for r in plan.solver_runs), default=0.0),
+            objective=None,
+            service_level=None,
+            tasks_assigned=0,
+            late_tasks=None,
+            travel_km=None,
+            operating_cost=None,
+            violations=None,
+            model_variables=0,
+            model_constraints=0,
+            optimality_gap=None,
+            split=split,
+            notes=(declined[0].notes or "")[:500],
+        )
+
     failed_runs = [r for r in plan.solver_runs if r.status == SolverStatus.ERROR]
     if failed_runs:
         message = "; ".join(f"{r.solver}: {r.notes or 'no detail recorded'}" for r in failed_runs)
@@ -192,7 +235,24 @@ def make_record(**kw: Any) -> RunRecord:  # small helper for readability
 # suite 1: scalability
 # --------------------------------------------------------------------------
 
+#: The scalability ladder is an explicit task count rather than the generator's
+#: named difficulty presets, so the axis means exactly what the report says it
+#: means. Resource count scales with it (see `_resources_for_tasks`) to keep the
+#: demand-to-capacity ratio roughly constant, so a growth curve reflects size
+#: rather than a steadily worsening ratio.
 SCALABILITY_LEVELS = ("small", "medium", "large", "stress")
+SCALABILITY_TASK_COUNTS = (10, 25, 50, 100, 250)
+
+#: Resource count per task count. Kept explicit instead of derived so the
+#: experiment is reproducible by reading the value.
+SCALABILITY_RESOURCES: Mapping[int, int] = {10: 5, 25: 8, 50: 12, 100: 16, 250: 28}
+
+#: Task counts for which an exact solver is worth attempting at all. A 250-task
+#: CP-SAT instance is a minutes-long solve, not a useful data point on a plot
+#: whose axis is seconds, so it is attempted only to obtain an honest
+#: TIME_LIMIT row - never skipped, because a skipped size is an invented
+#: measurement.
+SCALABILITY_EXACT_CEILING = 100
 
 
 def run_scalability(
@@ -205,28 +265,37 @@ def run_scalability(
     timer = ExperimentTimer()
     results: list[dict[str, Any]] = []
     failures: list[FailureRecord] = []
-    best_by_level: dict[str, float] = {}
+    best_by_size: dict[int, float] = {}
 
-    for level in SCALABILITY_LEVELS:
-        sc_cfg = difficulty_config(level, seed=cfg.seed, maintenance_count=cfg.scenario.maintenance_count)
+    for num_tasks in SCALABILITY_TASK_COUNTS:
+        resources = SCALABILITY_RESOURCES.get(num_tasks, max(3, num_tasks // 9))
+        sc_cfg = difficulty_config(
+            "stress" if num_tasks >= 250 else ("large" if num_tasks >= 100 else "medium"),
+            seed=cfg.seed,
+            num_tasks=num_tasks,
+            num_teams=max(1, resources // 2),
+            num_vehicles=max(1, resources - resources // 2),
+            maintenance_count=cfg.scenario.maintenance_count,
+        )
         scenario = generate(sc_cfg)
-        split = SYNTHETIC_SPLIT[level]
+        split = SYNTHETIC_SPLIT.get(sc_cfg.name.rsplit("-", 2)[-1] if "-" in sc_cfg.name else "medium", "eval")
         for solver in cfg.solver_names():
             for budget in cfg.time_budgets:
                 with timer.time("solve"):
                     plan, records, run = run_single(
                         scenario, solver, budget,
-                        seed=cfg.seed, split=split, benchmark="synthetic", instance=level,
+                        seed=cfg.seed, split=split, benchmark="synthetic", instance=f"synthetic-{num_tasks}t",
                     )
                 store.add_run(directory, run)
                 results.append({
-                    "level": level,
+                    "task_count": num_tasks,
                     "num_tasks": len(scenario.tasks),
                     "num_resources": len(scenario.resources),
                     "solver": solver,
                     "time_budget_s": budget,
-                    "status": str(plan.status),
+                    "status": str(run.status),
                     "objective": plan.objective.total,
+                        "tasks_assigned": len(plan.assignments),
                     "runtime_s": run.runtime_s,
                     "service_level": plan.service_level,
                     "late_tasks": plan.late_tasks,
@@ -236,11 +305,11 @@ def run_scalability(
                 })
                 failures.extend(records)
                 # best achievable score at this size, for gap-vs-best
-                best_by_level[level] = max(
-                    best_by_level.get(level, -1e18), plan.objective.total
+                best_by_size[num_tasks] = max(
+                    best_by_size.get(num_tasks, -1e18), plan.objective.total
                 )
     for row in results:
-        best = best_by_level.get(row["level"])
+        best = best_by_size.get(row["task_count"])
         row["gap_to_best"] = (
             (best - row["objective"]) / abs(best) if best not in (None, 0) else None
         )
@@ -279,8 +348,9 @@ def run_time_budget(
             rows.append({
                 "solver": solver,
                 "time_budget_s": budget,
-                "status": str(plan.status),
+                "status": str(run.status),
                 "objective": plan.objective.total,
+                        "tasks_assigned": len(plan.assignments),
                 "runtime_s": run.runtime_s,
                 "service_level": plan.service_level,
                 "late_tasks": plan.late_tasks,
@@ -330,8 +400,9 @@ def run_constraint_pressure(
             rows.append({
                 "scarcity": scarcity,
                 "deadline_tightness": tightness,
-                "status": str(plan.status),
+                "status": str(run.status),
                 "objective": plan.objective.total,
+                        "tasks_assigned": len(plan.assignments),
                 "runtime_s": run.runtime_s,
                 "service_level": plan.service_level,
                 "late_tasks": plan.late_tasks,
@@ -450,6 +521,7 @@ def run_disruption_stress(
                         "disruption_id": disruption.id,
                         "service_level": plan.service_level,
                         "objective": plan.objective.total,
+                        "tasks_assigned": len(plan.assignments),
                         "late_tasks": plan.late_tasks,
                         "tasks_assigned": plan.tasks_assigned,
                         "travel_km": plan.total_travel_km,
@@ -535,8 +607,9 @@ def run_solver_comparison(
                     "instance": run.instance,
                     "solver": solver,
                     "time_budget_s": budget,
-                    "status": str(plan.status),
+                    "status": str(run.status),
                     "objective": plan.objective.total,
+                        "tasks_assigned": len(plan.assignments),
                     "runtime_s": run.runtime_s,
                     "service_level": plan.service_level,
                     "late_tasks": plan.late_tasks,

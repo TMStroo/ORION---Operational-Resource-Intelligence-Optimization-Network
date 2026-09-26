@@ -1,9 +1,9 @@
 {
-  "experiment_id": "benchmark-disruption_stress-20260926T170813Z-14526d5e2e",
-  "created_utc": "2026-09-26T17:08:13+00:00",
+  "experiment_id": "benchmark-disruption_stress-20260926T212010Z-14526d5e2e",
+  "created_utc": "2026-09-26T21:20:10+00:00",
   "kind": "benchmark-disruption_stress",
   "description": "Solver comparison and time-budget trade-off on public Solomon VRPTW instances and the synthetic operational suite, at matched budgets.",
-  "git_commit": "4fd73245f975d0376f9a470a69f6647c7b4e90ba",
+  "git_commit": "47ef98a5be46f2b5fb6aeeb38235423b553ee385",
   "python_version": "3.14.7",
   "platform": "Windows-11-10.0.26200-SP0",
   "package_versions": {
@@ -127,10 +127,10 @@
     "stress": "eval"
   },
   "runs": [],
-  "status": "superseded",
-  "completed_utc": "2026-09-26T17:08:14+00:00",
-  "superseded_utc": "2026-09-26T21:20:18+00:00",
-  "superseded_reason": "Re-run after MIN_COST_FLOW fixes; see benchmark-disruption_stress-20260926T212010Z-14526d5e2e.",
+  "status": "succeeded",
+  "completed_utc": "2026-09-26T21:20:10+00:00",
+  "superseded_utc": null,
+  "superseded_reason": null,
   "superseded_by": null,
   "schema_version": "orion.experiment/1"
 }
