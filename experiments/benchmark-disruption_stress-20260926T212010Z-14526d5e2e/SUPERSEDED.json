@@ -1,0 +1,7 @@
+{
+  "status": "superseded",
+  "reason": "recorded at commit 47ef98a, before the min-cost-flow network fixes, the job-shop reconstruction fixes and the benchmark gap fix; the stored rows no longer match what the current code produces",
+  "replaced_by": null,
+  "superseded_utc": "2026-09-26T23:24:32+00:00",
+  "note": "This directory is retained as a historical record of a run that was executed. It must not be quoted as evidence."
+}
