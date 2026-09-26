@@ -85,6 +85,8 @@ def _operation_tables(
 def validate_jobshop(
     instance: JobShopInstanceLike,
     assignments: Iterable[object],
+    *,
+    require_full_coverage: bool = False,
 ) -> JobShopValidation:
     """Check *assignments* against *instance* from scratch.
 
@@ -92,6 +94,10 @@ def validate_jobshop(
     and ``end``; it is duck-typed so a solver's own objects can be passed
     straight in without an adapter, and so a deliberately malformed stand-in can
     be used in tests.
+
+    Pass ``require_full_coverage=True`` to also treat an unplaced operation as a
+    finding. The default is False, because ORION's job-shop scenario permits
+    unassigned work by construction.
 
     Returns a :class:`JobShopValidation`. ``valid`` is true only when there are no
     findings at all, including any unassigned operation.
@@ -115,14 +121,25 @@ def validate_jobshop(
             )
 
     assigned_ids = set(seen)
-    for task_id in sorted(expected_ids - assigned_ids):
-        findings.append(
-            JobShopFinding(
-                "OPERATION_UNASSIGNED",
-                "no schedule places this operation",
-                task_id=task_id,
+    # An unplaced operation is only a *finding* when the caller says the instance
+    # requires full coverage. ORION's own job-shop scenario sets
+    # `allow_unassigned=True`, because its objective explicitly prices leaving
+    # work undone - a solver that drops 63 of 100 operations has made a
+    # legitimate scheduling decision, not committed an error, and reporting it as
+    # invalid would misdescribe the objective it was optimising.
+    #
+    # The count is still always reported (`operations_assigned`), so a caller can
+    # see the coverage without the validator asserting a constraint that does not
+    # exist.
+    if require_full_coverage:
+        for task_id in sorted(expected_ids - assigned_ids):
+            findings.append(
+                JobShopFinding(
+                    "OPERATION_UNASSIGNED",
+                    "no schedule places this operation",
+                    task_id=task_id,
+                )
             )
-        )
     for task_id in sorted(assigned_ids - expected_ids):
         findings.append(
             JobShopFinding(
@@ -201,21 +218,42 @@ def validate_jobshop(
                     )
                 )
 
-    # precedence within each job
+    # Precedence within each job.
+    #
+    # The chain is walked in *index* order, not in the order the operations happen
+    # to start. Sorting by start time and comparing neighbours tests the wrong
+    # thing: it asks whether a job's operations were scheduled back to back, which
+    # is not what precedence means. Two operations can be correctly ordered in
+    # time and still be reported as a violation, and - worse - a genuine inversion
+    # can be missed whenever a third operation interleaves between them.
+    #
+    #
+    # And the chain must be followed as *declared dependencies*, not as
+    # "consecutive present operations". A job whose fourth operation was left
+    # unassigned still has the fifth depending on the fourth; comparing the fifth
+    # against the third is checking a relation that does not exist. With
+    # `allow_unassigned` on, that mistake reported 12 phantom violations on
+    # LOCAL_SEARCH's ft10 plan.
+    predecessor: dict[str, str | None] = {}
     for job_id, operations in sorted(chain.items()):
-        placed = [t for t in operations if t in by_task]
-        placed.sort(key=lambda t: by_task[t].start)  # type: ignore[attr-defined]
-        for i in range(len(placed) - 1):
-            first, second = placed[i], placed[i + 1]
-            if by_task[second].start < by_task[first].end:  # type: ignore[attr-defined]
-                findings.append(
-                    JobShopFinding(
-                        "PRECEDENCE_VIOLATED",
-                        f"job {job_id}: {second} starts at {by_task[second].start} "  # type: ignore[attr-defined]
-                        f"before its predecessor {first} ends at {by_task[first].end}",  # type: ignore[attr-defined]
-                        task_id=second,
-                    )
+        previous: str | None = None
+        for task_id in operations:
+            predecessor[task_id] = previous
+            previous = task_id
+    for task_id, parent_id in sorted(predecessor.items(), key=lambda kv: kv[0]):
+        if parent_id is None or parent_id not in by_task or task_id not in by_task:
+            continue
+        parent_end = by_task[parent_id].end  # type: ignore[attr-defined]
+        child_start = by_task[task_id].start  # type: ignore[attr-defined]
+        if child_start < parent_end:
+            findings.append(
+                JobShopFinding(
+                    "PRECEDENCE_VIOLATED",
+                    f"{task_id} starts at {child_start} before its direct "
+                    f"prerequisite {parent_id} ends at {parent_end}",
+                    task_id=task_id,
                 )
+            )
 
     makespan = max((row.end for row in rows), default=0)  # type: ignore[attr-defined]
     return JobShopValidation(

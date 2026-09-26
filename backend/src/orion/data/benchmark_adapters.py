@@ -456,6 +456,39 @@ def parse_jobshop(text: str) -> list[JobShopInstance]:
     return instances
 
 
+def load_jobshop(
+    cache_dir: Path | str = "data/cache",
+    names: Sequence[str] | None = None,
+) -> dict[str, JobShopInstance]:
+    """Load OR-Library job-shop instances, downloading once and caching.
+
+    Keyless and free, like the Solomon source. The cached file is
+    gitignored; its checksum is recorded in every experiment manifest that uses
+    it, so a result can always be traced to the exact bytes it came from.
+    """
+    cache = Path(cache_dir)
+    target = cache / "jobshop1.txt"
+    if not target.exists():
+        blob = _fetch(JOBSHOP_URL, cache, None)
+        target.write_bytes(blob)
+    text = target.read_text(encoding="utf-8", errors="replace")
+    wanted = {n.strip().lower() for n in names} if names else None
+    out: dict[str, JobShopInstance] = {}
+    for instance in parse_jobshop(text):
+        key = instance.name.strip().lower()
+        if wanted is not None and key not in wanted:
+            continue
+        out[key] = instance
+    if wanted:
+        missing = sorted(wanted - set(out))
+        if missing:
+            raise KeyError(
+                f"job-shop instances not found in jobshop1.txt: {missing}; "
+                f"available: {sorted(i.name.lower() for i in parse_jobshop(text))[:20]}..."
+            )
+    return out
+
+
 def _optimum_for(name: str) -> int:
     """Published optimum for *name*, or 0 when unknown.
 

@@ -68,6 +68,28 @@ def _insertion_options(
     """
     weights = context.scenario.objective_weights
     options: list[tuple[float, str, int]] = []
+
+    # `dependency_bounds` only knows about tasks already in some sequence, so a
+    # prerequisite that has not been placed yet contributes no bound and the
+    # insertion looks free - which is how a value-dense successor got placed ahead
+    # of its own prerequisite and the rebuilt plan came back with precedence
+    # violations on every job-shop instance. The pool is ordered by value density,
+    # not by dependency, so this is a real case.
+    #
+    # The fix is a position constraint rather than a refusal: an unplaced
+    # prerequisite must not block this task outright, because the pool is in
+    # value-density order and refusing a job's later operations strands them.
+    task = context.task_by_id(task_id)
+    placed_resource: dict[str, str] = {}
+    for resource_id, seq in sequences.items():
+        for other in seq:
+            placed_resource[other] = resource_id
+    pending = (
+        task.dependencies
+        if task is not None and context.scenario.constraints.enforce_dependencies
+        else ()
+    )
+
     pair_indices = context.task_pairs.get(task_id, ())
     # Finish times of tasks on *other* resources, so a prerequisite placed
     # elsewhere still constrains this insertion.
@@ -81,6 +103,52 @@ def _insertion_options(
         current = sequences[resource_id]
         speed = resource.speed_factor
         for position in range(len(current) + 1):
+            if pending:
+                # Two orderings matter, and `dependency_bounds` only covers one of
+                # them: it is a snapshot taken once at the top of this function, so
+                # a prerequisite inserted *after* that snapshot contributes no bound
+                # and the insertion looks free. J05-O04 was placed at minute 185
+                # while its prerequisite J05-O03, on another resource, finished at
+                # minute 197 - `schedule_sequence` honours only the bound it was
+                # handed, so the invalid start survived into the plan.
+                #
+                # Same-resource ordering is a list-position check. Cross-resource
+                # ordering is a time check against the current sequence's earliest
+                # end. An unplaced prerequisite must not block the insertion at all:
+                # the pool is in value-density order, so refusing deadlocks a job
+                # (its later operations strand behind a refused predecessor) and
+                # produced 0/36 operations placed on every job-shop instance.
+                blocked = False
+                for dep in pending:
+                    where = placed_resource.get(dep)
+                    if where is None:
+                        continue
+                    if where == resource_id:
+                        if dep in current[position:]:
+                            blocked = True
+                            break
+                    else:
+                        finish = min(
+                            (
+                                schedule_sequence(
+                                    other_seq, context, where, external_bounds=external
+                                )
+                                or []
+                            )[-1].end
+                            for other_seq in [sequences[where]]
+                        )
+                        earliest = min(
+                            a.start
+                            for a in schedule_sequence(
+                                current[:position] + [task_id], context, resource_id
+                            )
+                            or []
+                        )
+                        if earliest < finish:
+                            blocked = True
+                            break
+                if blocked:
+                    continue
             candidate = current[:position] + [task_id] + current[position:]
             result = schedule_sequence(
                 candidate, context, resource_id, external_bounds=external

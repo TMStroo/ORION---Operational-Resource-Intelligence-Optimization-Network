@@ -18,6 +18,7 @@ solvers:
 - HEURISTIC
 - LOCAL_SEARCH
 - CP_SAT
+- MILP
 - MIN_COST_FLOW
 time_budgets:
 - 5.0
