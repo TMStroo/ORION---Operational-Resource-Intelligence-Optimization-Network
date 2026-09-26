@@ -390,21 +390,35 @@ class Resource:
 class ObjectiveWeights:
     """Configurable objective coefficients.
 
-    ORION **maximises** a single scalar ``service_score``. The default weights
-    are a starting point, not a prescription: a scenario may set any of them, and
-    the technical report documents how weight choice changes the plan. ``w_late``
-    is expressed per hour of lateness so that a value of 4.0 means "one hour
-    late costs as much as a medium-priority task is worth".
+    ORION **maximises** a single scalar ``service_score``. The defaults are a
+    *calibrated starting point*, not a prescription: a scenario may set any of
+    them, and the technical report documents how the choice changes the plan.
+
+    Calibration rule the defaults follow
+    -----------------------------------
+    For a plan that dispatches every resource and works a full shift, the total
+    penalty from ``w_travel + w_cost + w_dispatch`` stays **below 40%** of the
+    gross service value of the same scenario. Without that property the
+    objective inverts: the optimiser finds it cheaper to drop tasks than to
+    dispatch a resource, and every plan scores near zero or negative. This is
+    not a theoretical concern - the first version of these defaults had
+    ``w_dispatch = 1.5`` against 8 resources and produced exactly that failure.
+    The constraint-pressure experiment in the report then sweeps these weights
+    deliberately, which is the *right* way to study the effect.
+
+    ``w_late`` is per hour of lateness, so ``w_late = 0.4`` means "one hour late
+    costs 40% of a LOW task's value" - enough to prefer a nearby late job over a
+    distant on-time one, not enough to abandon the job.
     """
 
     w_completion: float = 10.0
     w_priority: float = 2.0
-    w_late: float = 4.0
-    w_travel: float = 0.35
-    w_cost: float = 0.2
-    w_dispatch: float = 1.5
-    w_overload: float = 0.8
-    w_move_idle: float = 0.15
+    w_late: float = 0.4
+    w_travel: float = 0.02
+    w_cost: float = 0.01
+    w_dispatch: float = 0.05
+    w_overload: float = 0.5
+    w_move_idle: float = 0.02
     w_violation: float = 50.0
 
     def __post_init__(self) -> None:
@@ -673,11 +687,36 @@ class Scenario:
                         f"task {task.id} has no capable resource "
                         f"(needs {sorted(task.required_capabilities) or 'no capability'})"
                     )
-        for task in self.tasks:
+        # Precedence feasibility. A dependent task can start as soon as its
+        # prerequisite's *earliest* finish (release + duration), not its
+        # deadline - using the deadline here would flag scenarios that a good
+        # plan can satisfy, which is a false "infeasible".
+        parent_earliest_finish: dict[str, int] = {}
+        # process in dependency order so a chain is evaluated correctly
+        remaining = {t.id: t for t in self.tasks}
+        ordered: list[Task] = []
+        placed: set[str] = set()
+
+        def visit(task: Task, guard: frozenset[str] = frozenset()) -> None:
+            if task.id in placed:
+                return
+            for dep in task.dependencies:
+                parent = remaining.get(dep)
+                if parent is not None and dep not in guard:
+                    visit(parent, guard | {task.id})
+            placed.add(task.id)
+            ordered.append(task)
+
+        for candidate in self.tasks:
+            visit(candidate)
+
+        for task in ordered:
             earliest = task.release_time
             for dep in task.dependencies:
                 parent = self.task(dep)
-                earliest = max(earliest, parent.deadline + parent.duration)
+                finish = parent_earliest_finish.get(dep, parent.release_time + parent.duration)
+                earliest = max(earliest, finish)
+            parent_earliest_finish[task.id] = earliest + task.duration
             if earliest + task.duration > self.horizon.end:
                 return (
                     f"task {task.id} cannot finish inside the horizon: earliest start "
