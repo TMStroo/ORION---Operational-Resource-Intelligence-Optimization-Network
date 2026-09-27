@@ -44,3 +44,8 @@ results/vite.log
 # Reproducibility check output: two throwaway runs, regenerated on demand by
 # scripts/check_reproducibility.py. Not evidence, so not tracked.
 results/reproducibility/
+
+# Local helper written by the Docker build instructions; not a repo file.
+.git_commit.txt
+results/compose_up.log
+results/ci_report

@@ -1,0 +1,107 @@
+# ORION - local stack.
+#
+#   docker compose build                  build the backend image
+#   docker compose --profile build run --rm frontend-build
+#                                         build the production frontend bundle
+#   docker compose up -d                  backend on :8000, frontend on :5173
+#   docker compose run --rm tests         run the full test suite
+#   docker compose run --rm demo          run the end-to-end demonstration
+#
+# The database is a named volume, so plans and scenarios survive a restart.
+# The backend image carries the stored experiment artifacts so the report and
+# the figures can be regenerated inside the container without a re-run.
+#
+# The frontend bundle is built by a separate one-shot service rather than
+# baked into the nginx image. frontend/dist is gitignored, so a clean clone has
+# no bundle until this runs; serving nginx without it yields an empty page.
+# Both steps are therefore required, and `up` says so if the bundle is absent.
+
+name: orion
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        # .git is not in the build context, so the commit comes from here.
+        # `git rev-parse HEAD` is resolved by compose at build time.
+        GIT_COMMIT: "${ORION_GIT_COMMIT:-unknown}"
+    image: orion-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      ORION_DATABASE_URL: "sqlite:////data/orion.db"
+      ORION_GIT_COMMIT: "${ORION_GIT_COMMIT:-unknown}"
+    volumes:
+      - orion-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # Builds the production bundle once, so `docker compose up` cannot serve a
+  # stale one. The bundle is bind-mounted rather than baked into the image: it
+  # has to be built on the host, where node_modules lives, and rebuilding it
+  # inside nginx is not possible. Without this service a developer who edits the
+  # frontend sees the previous build, because nothing rebuilds dist/.
+  frontend-build:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: >
+      sh -c "npm ci --no-audit --no-fund &&
+             node node_modules/vite/bin/vite.js build"
+    profiles: ["build"]
+
+  # The frontend is served by nginx, which proxies /api to the backend. The
+  # application itself contains no mock data, so this is the real product.
+  frontend:
+    image: nginx:1.27-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
+  # A one-shot service that runs the suite. Kept in the compose file so
+  # `docker compose run --rm tests` uses the same image the backend does.
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    image: orion-tests:latest
+    profiles: ["check"]
+    environment:
+      PYTHONPATH: /src/backend/src
+    command: ["python", "-m", "pytest", "-q"]
+
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: orion-demo:latest
+    profiles: ["check"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      ORION_DATABASE_URL: "sqlite:////data/orion.db"
+    volumes:
+      - orion-data:/data
+      - ./results:/app/results
+    command: ["python", "-m", "orion", "demo"]
+
+volumes:
+  orion-data:

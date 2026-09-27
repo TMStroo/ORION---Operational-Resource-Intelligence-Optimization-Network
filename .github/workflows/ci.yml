@@ -1,0 +1,158 @@
+# Continuous integration for ORION.
+#
+# Split into two workflows on purpose. This one runs on small deterministic
+# fixtures and must finish in minutes, because a suite that takes an hour
+# stops being run. The full benchmark matrix lives in `benchmarks.yml` and is
+# dispatched separately; re-running it on every commit would burn solver time
+# to re-derive numbers that are already stored and versioned.
+#
+# Every job below is a command that was actually executed in this repository.
+# A job is only listed here once it has passed locally for the same reason.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONPATH: backend/src
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  # ---------------------------------------------------------------- tests
+  # The whole suite at once, so a green run means the same thing as a green
+  # `python -m pytest` on a developer machine.
+  tests:
+    name: unit, integration, solver, API and property tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Run the full test suite
+        run: python -m pytest -q --tb=short
+
+  # Each group is also run alone. A failure here names the area instead of
+  # leaving a reader to bisect a combined run.
+  property-tests:
+    name: property tests (Hypothesis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest tests/test_properties.py -q
+
+  benchmark-honesty:
+    name: benchmark honesty
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest tests/test_benchmark_honesty.py -q
+
+  api-tests:
+    name: API tests (TestClient)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest tests/test_api.py -q
+
+  # A real uvicorn process on a real socket. TestClient exercises the ASGI app
+  # in-process and cannot catch a lifespan, middleware-ordering or port-binding
+  # fault, which is exactly why this exists as a separate job.
+  api-live:
+    name: API against a real server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -e ".[dev]"
+      - name: Start uvicorn
+        run: |
+          python -m uvicorn orion.api.asgi:app --host 127.0.0.1 --port 8137 &
+          for i in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:8137/health && break
+            sleep 1
+          done
+      - name: Run the live workflow checks
+        run: python scripts/check_api_live.py --base http://127.0.0.1:8137
+
+  cli-tests:
+    name: CLI smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -e ".[dev]"
+      - name: Every documented CLI entry point runs
+        run: |
+          python -m orion --help
+          python -m orion demo --help
+          python -m orion verify
+          python -m orion report --help
+
+  # ------------------------------------------------- documentation and data
+  # These fail when a number in the prose no longer matches the artifact it
+  # came from, which is the failure mode a benchmark report is most prone to.
+  documentation:
+    name: README, report and consistency checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -e ".[dev]"
+      - name: README matches live evidence
+        run: python scripts/check_readme.py
+      - name: Artifacts, README and report agree
+        run: python scripts/check_consistency.py
+      - name: Report regenerates with all sections and figures
+        run: python -m orion report --out "$RUNNER_TEMP/report"
+      - name: The report is a file, not a directory
+        run: test -s "$RUNNER_TEMP/report/report.html" && test -s "$RUNNER_TEMP/report/report.pdf"
+
+  # ------------------------------------------------------------- packaging
+  docker:
+    name: Docker build and container tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The commit is passed in because .git is excluded from the build
+      # context; without it every manifest written in the image would cite an
+      # unknown commit.
+      - run: echo "GIT_COMMIT=${GITHUB_SHA}" >> "$GITHUB_ENV"
+      - name: Build the backend image
+        run: docker compose build
+      - name: Run the suite inside the image
+        run: docker compose run --rm tests
+      - name: Start the stack
+        run: docker compose up -d backend
+      - name: Wait for the backend to report healthy
+        run: |
+          for i in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:8000/health && break
+            sleep 2
+          done
+          docker compose ps
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
