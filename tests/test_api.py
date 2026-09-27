@@ -22,6 +22,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from typing import get_args
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend" / "src"))
 
@@ -602,3 +603,36 @@ def test_importing_a_bare_payload_reports_that_it_is_not_an_export(client):
     response = client.post("/exports/scenario", json={"artifact": '{"hello": "world"}'})
     assert response.status_code == 422
     assert "not an ORION export" in response.json()["detail"]
+
+
+# --------------------------------------------------------- published schema
+
+
+def test_the_difficulty_enum_matches_what_the_generator_accepts(client):
+    """The advertised `difficulty` values must actually be accepted.
+
+    The schema declared `Literal["easy", "medium", "hard"]` while
+    `difficulty_config` accepts only `small`, `medium`, `large` and `stress`.
+    Three of the four published values were rejected by the server, so the
+    OpenAPI document lied to any client that read it - and only the default
+    value happened to work. Found by running the workflow over real HTTP.
+    """
+    from orion.data.scenario_generator import DIFFICULTY_PRESETS
+
+    from orion.api.schemas import CreateScenarioRequest
+
+    declared = set(get_args(CreateScenarioRequest.model_fields["difficulty"].annotation))
+    assert declared == set(DIFFICULTY_PRESETS), (
+        f"schema advertises {sorted(declared)} but the generator accepts "
+        f"{sorted(DIFFICULTY_PRESETS)}"
+    )
+
+    for level in sorted(DIFFICULTY_PRESETS):
+        response = client.post(
+            "/scenarios",
+            json={"name": f"difficulty-{level}", "difficulty": level, "task_count": 6},
+        )
+        assert response.status_code == 201, (
+            f"difficulty {level!r} is advertised but the server answered "
+            f"{response.status_code}: {response.text[:160]}"
+        )

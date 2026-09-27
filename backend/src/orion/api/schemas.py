@@ -73,7 +73,11 @@ class CreateScenarioRequest(ApiModel):
     task_count: int = Field(default=25, ge=1, le=1000)
     resource_count: int = Field(default=8, ge=1, le=200)
     seed: int = 0
-    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    # Must match DIFFICULTY_PRESETS in orion.data.scenario_generator. The
+    # previous annotation advertised easy/medium/hard, none of which the
+    # generator accepts, so the published OpenAPI was wrong and only the
+    # default value happened to work.
+    difficulty: Literal["small", "medium", "large", "stress"] = "medium"
     description: str = ""
 
 
