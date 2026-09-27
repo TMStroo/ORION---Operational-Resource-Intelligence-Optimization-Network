@@ -152,6 +152,10 @@ class PlanRow(Base):
     completion: Mapped[float] = mapped_column(Float, default=0.0)
     late_tasks: Mapped[int] = mapped_column(Integer, default=0)
     tasks_assigned: Mapped[int] = mapped_column(Integer, default=0)
+    #: How many tasks the scenario offered. Stored because "12 of 20 assigned" is
+    #: the question a plan is usually asked, and it cannot be derived from a
+    #: plan row alone once the scenario's task set has moved on.
+    tasks_total: Mapped[int] = mapped_column(Integer, default=0)
     runtime_s: Mapped[float] = mapped_column(Float, default=0.0)
     infeasible: Mapped[bool] = mapped_column(Boolean, default=False)
     # The full Plan, so a stored plan reconstructs exactly rather than approximately.

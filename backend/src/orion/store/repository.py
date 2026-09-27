@@ -143,13 +143,55 @@ class Store:
 
     # --------------------------------------------------------------- scenarios
 
-    def save_scenario(self, scenario: Scenario, *, source: str = "generated") -> str:
-        """Insert or replace a scenario and its task/resource rows."""
+    def save_scenario(
+        self, scenario: Scenario, *, source: str = "generated", replace: bool = False
+    ) -> str:
+        """Insert or update a scenario and its task/resource rows.
+
+        ``replace=False`` (the default) updates an existing scenario in place and
+        leaves its plans alone. Deleting and re-inserting would cascade away
+        every plan, every comparison and every simulation event recorded against
+        the scenario - so a re-save must never do that implicitly.
+
+        ``replace=True`` is the explicit destructive form, used when the
+        scenario's *identity* is being redefined rather than its state.
+        """
         with self.session() as session:
             existing = session.get(ScenarioRow, scenario.id)
-            if existing is not None:
+            if existing is not None and replace:
                 session.delete(existing)
                 session.flush()
+                existing = None
+            if existing is not None:
+                existing.name = scenario.name
+                existing.description = scenario.description
+                existing.task_count = len(scenario.tasks)
+                existing.resource_count = len(scenario.resources)
+                existing.horizon_end = scenario.horizon.end
+                existing.source = source
+                existing.tags = join_values(scenario.tags)
+                existing.graph_json = dumps(_scenario_graph(scenario))
+                # Task and resource rows are the queryable projection; if the
+                # task set changed they are stale, so replace just those two
+                # collections and leave the plans alone.
+                for task in list(existing.tasks):
+                    existing.tasks.remove(task)
+                for res in list(existing.resources):
+                    existing.resources.remove(res)
+                session.flush()
+                scenario_row = existing
+            else:
+                scenario_row = ScenarioRow(
+                    id=scenario.id,
+                    name=scenario.name,
+                    description=scenario.description,
+                    task_count=len(scenario.tasks),
+                    resource_count=len(scenario.resources),
+                    horizon_end=scenario.horizon.end,
+                    source=source,
+                    tags=join_values(scenario.tags),
+                    graph_json=dumps(_scenario_graph(scenario)),
+                )
 
             row = ScenarioRow(
                 id=scenario.id,
@@ -163,7 +205,7 @@ class Store:
                 graph_json=dumps(_scenario_graph(scenario)),
             )
             for task in scenario.tasks:
-                row.tasks.append(
+                scenario_row.tasks.append(
                     TaskRow(
                         task_id=task.id,
                         location=task.location,
@@ -192,7 +234,7 @@ class Store:
                     )
                 )
             for res in scenario.resources:
-                row.resources.append(
+                scenario_row.resources.append(
                     ResourceRow(
                         resource_id=res.id,
                         kind=str(getattr(res.kind, "value", res.kind)),
@@ -215,7 +257,8 @@ class Store:
                         ),
                     )
                 )
-            session.add(row)
+            if existing is None:
+                session.add(scenario_row)
             session.commit()
         return scenario.id
 
@@ -293,6 +336,7 @@ class Store:
                 completion=float(getattr(plan, "completion", 0.0) or 0.0),
                 late_tasks=int(getattr(plan, "late_tasks", 0) or 0),
                 tasks_assigned=len(plan.assignments),
+                tasks_total=int(getattr(plan, "tasks_total", 0) or 0),
                 runtime_s=float(getattr(plan, "runtime_seconds", 0.0) or 0.0),
                 infeasible=bool(getattr(plan, "infeasible", False)),
                 plan_json=dumps(plan.to_dict()),
@@ -481,7 +525,13 @@ class Store:
                         run_id=run_id,
                         ordinal=ordinal,
                         time=int(getattr(event, "time", 0) or 0),
-                        kind=str(getattr(event, "kind", "") or getattr(event, "type", "")),
+                        kind=str(
+                            getattr(
+                                getattr(event, "type", None), "name", None
+                            )
+                            or getattr(event, "type", "")
+                            or getattr(event, "kind", "")
+                        ),
                         subject=str(getattr(event, "subject", "") or ""),
                         detail=str(getattr(event, "detail", "") or ""),
                         payload_json=dumps(getattr(event, "detail_json", {}) or {}),
