@@ -49,3 +49,4 @@ results/reproducibility/
 .git_commit.txt
 results/compose_up.log
 results/ci_report
+results/report_out/
