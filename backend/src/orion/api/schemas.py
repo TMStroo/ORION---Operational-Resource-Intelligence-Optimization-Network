@@ -463,3 +463,31 @@ class ErrorResponse(ApiModel):
     error: str
     detail: str
     context: dict[str, Any] = Field(default_factory=dict)
+
+# ----------------------------------------------------------------- exports
+
+
+class ExportArtifact(ApiModel):
+    """One written export. ``content_type`` says how to interpret ``body``."""
+
+    kind: str
+    filename: str
+    content_type: str
+    body: str
+    bytes: int
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class ImportResult(ApiModel):
+    """The result of reloading an export, with what survived reported."""
+
+    kind: str
+    entity_id: str
+    status: str
+    objective: float | None = None
+    tasks_assigned: int | None = None
+    tasks_total: int | None = None
+    runtime_s: float | None = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    round_trip_identical: bool = True
+    detail: dict[str, Any] = Field(default_factory=dict)

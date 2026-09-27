@@ -26,10 +26,12 @@ from orion.api.schemas import (
     CreateScenarioRequest,
     DisruptRequest,
     DisruptResponse,
+    ExportArtifact,
     ExperimentDetail,
     ExperimentListResponse,
     ExperimentSummary,
     HealthResponse,
+    ImportResult,
     OptimizeRequest,
     PlanComparisonResponse,
     PlanDetail,
@@ -241,6 +243,198 @@ def create_app(
                 detail=f"scenario {scenario.id!r} was saved but could not be read back",
             )
         return S.scenario_detail(row, scenario)
+
+    @app.get(
+        "/scenarios/{scenario_id}/export",
+        response_model=ExportArtifact,
+        tags=["exports"],
+    )
+    def export_scenario_artifact(
+        scenario_id: str, format: str = "json", store: Store = Depends(get_store)
+    ) -> ExportArtifact:
+        """Export a scenario as JSON, or its plan metrics as CSV."""
+        scenario = _scenario_or_404(scenario_id, store)
+        import tempfile
+
+        from orion.exporting import export_scenario, plan_metric_rows_csv
+
+        with tempfile.TemporaryDirectory() as tmp:
+            if format == "json":
+                path = export_scenario(
+                    scenario,
+                    Path(tmp) / "scenario.json",
+                    source=f"api:/scenarios/{scenario_id}",
+                    seed=scenario.metadata.get("seed"),
+                )
+                kind, filename = "scenario", "scenario.json"
+            elif format == "metrics":
+                plans = store.list_plans(scenario_id=scenario_id, limit=1)
+                if not plans:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"scenario {scenario_id!r} has no plan to export metrics for",
+                    )
+                plan = store.load_plan(plans[0].id)
+                path = plan_metric_rows_csv(
+                    plan,
+                    scenario,
+                    Path(tmp) / "plan_metrics.csv",
+                    source=f"api:/scenarios/{scenario_id}",
+                    seed=scenario.metadata.get("seed"),
+                )
+                kind, filename = "metrics", "plan_metrics.csv"
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"unsupported export format {format!r}; use 'json' or 'metrics'",
+                )
+            body, provenance, content_type = _export_body(path)
+        return ExportArtifact(
+            kind=kind,
+            filename=filename,
+            content_type=content_type,
+            body=body,
+            bytes=len(body.encode("utf-8")),
+            provenance=provenance,
+        )
+
+    @app.get(
+        "/plans/{plan_id}/export",
+        response_model=ExportArtifact,
+        tags=["exports"],
+    )
+    def export_plan_artifact(
+        plan_id: str, format: str = "json", store: Store = Depends(get_store)
+    ) -> ExportArtifact:
+        """Export a plan as JSON, or its event-free metric rows as CSV."""
+        row, plan = _plan_or_404(plan_id, store)
+        import tempfile
+
+        from orion.exporting import export_plan
+
+        with tempfile.TemporaryDirectory() as tmp:
+            if format == "json":
+                path = export_plan(
+                    plan,
+                    Path(tmp) / "plan.json",
+                    source=f"api:/plans/{plan_id}",
+                )
+                kind, filename = "plan", "plan.json"
+            elif format == "timeline":
+                from orion.exporting import write_csv
+
+                path = write_csv(
+                    [
+                        {
+                            # Field names come from Assignment itself; the
+                            # travel attributes are travel_before (minutes)
+                            # and travel_distance_km.
+                            "task_id": a.task_id,
+                            "resource_id": a.resource_id,
+                            "start": a.start,
+                            "end": a.end,
+                            "location": a.location,
+                            "priority": a.priority,
+                            "lateness": a.lateness,
+                            "travel_before": a.travel_before,
+                            "travel_distance_km": a.travel_distance_km,
+                        }
+                        for a in plan.assignments
+                    ],
+                    Path(tmp) / "timeline.csv",
+                    provenance={"kind": "timeline", "source": f"api:/plans/{plan_id}"},
+                )
+                kind, filename = "timeline", "timeline.csv"
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"unsupported export format {format!r}; use 'json' or 'timeline'",
+                )
+            body, provenance, content_type = _export_body(path)
+        return ExportArtifact(
+            kind=kind,
+            filename=filename,
+            content_type=content_type,
+            body=body,
+            bytes=len(body.encode("utf-8")),
+            provenance=provenance,
+        )
+
+    @app.post("/exports/scenario", response_model=ImportResult, tags=["exports"])
+    def import_scenario_artifact(payload: dict[str, Any]) -> ImportResult:
+        """Reload an exported scenario and report what survived.
+
+        The check is a real round trip: the reloaded entity's ``to_dict`` is
+        compared against the payload it came from, and a mismatch is reported
+        rather than swallowed.
+        """
+        import json as _json
+
+        from orion.domain.entities import Scenario
+        from orion.exporting import ExportError
+        from orion.importing import read_inline_artifact
+
+        try:
+            # Through the shared loader, so the API rejects exactly what the
+            # library rejects instead of accepting a payload the CLI would
+            # refuse.
+            data, provenance = read_inline_artifact(payload.get("artifact", payload))
+            scenario = Scenario.from_dict(data)
+        except (ExportError, ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"cannot reload scenario: {exc}",
+            ) from exc
+        identical = scenario.to_dict() == data
+        return ImportResult(
+            kind="scenario",
+            entity_id=scenario.id,
+            status="RELOADED",
+            provenance=provenance,
+            round_trip_identical=identical,
+            detail={"tasks": len(scenario.tasks), "resources": len(scenario.resources)},
+        )
+
+    @app.post("/exports/plan", response_model=ImportResult, tags=["exports"])
+    def import_plan_artifact(payload: dict[str, Any]) -> ImportResult:
+        """Reload an exported plan and report ids, status, objective and runtime."""
+        import json as _json
+
+        from orion.domain.plans import Plan
+        from orion.exporting import ExportError
+        from orion.importing import read_inline_artifact
+
+        try:
+            data, provenance = read_inline_artifact(payload.get("artifact", payload))
+            plan = Plan.from_dict(data)
+        except (ExportError, ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"cannot reload plan: {exc}",
+            ) from exc
+        identical = plan.to_dict() == data
+        # Plan.objective is an ObjectiveBreakdown; `total` is the scored value
+        # every other surface reports, so use the same one here.
+        return ImportResult(
+            kind="plan",
+            entity_id=plan.id,
+            status=plan.status,
+            objective=float(plan.objective.total),
+            tasks_assigned=plan.tasks_assigned,
+            tasks_total=plan.tasks_total,
+            provenance=provenance,
+            round_trip_identical=identical,
+            detail={
+                "assignments": len(plan.assignments),
+                "solver_runs": len(plan.solver_runs),
+                "created_at": plan.created_at,
+                "parent_plan_id": plan.parent_plan_id,
+                "solver_statuses": [r.status for r in plan.solver_runs],
+                "runtimes_s": [r.runtime_s for r in plan.solver_runs],
+            },
+        )
+
+    # ---------------------------------------------------------- comparisons
 
     @app.get("/scenarios/{scenario_id}", response_model=ScenarioDetail, tags=["scenarios"])
     def get_scenario(scenario_id: str, store: Store = Depends(get_store)) -> ScenarioDetail:
@@ -668,7 +862,33 @@ def create_app(
             ),
         )
 
-    # ---------------------------------------------------------- comparisons
+    # --------------------------------------------------------------- exports
+
+    def _export_body(path):
+        """Read a written export back for transport, with its provenance."""
+        from orion.exporting import provenance_block  # noqa: F401
+        from orion.importing import provenance_of
+
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".json":
+            import json as _json
+
+            provenance = _json.loads(text).get("provenance") or {}
+            content_type = "application/json"
+        else:
+            # write_csv puts the block on a leading comment line rather than in
+            # a sidecar, so it is parsed back out of the file itself.
+            provenance = {}
+            first = text.splitlines()[0] if text else ""
+            if first.startswith("# provenance: "):
+                import json as _json
+
+                try:
+                    provenance = _json.loads(first[len("# provenance: "):])
+                except ValueError:
+                    provenance = {}
+            content_type = "text/csv"
+        return text, provenance, content_type
 
     @app.get(
         "/plans/{plan_id}/comparison", response_model=PlanComparisonResponse, tags=["plans"]

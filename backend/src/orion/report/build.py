@@ -1114,6 +1114,16 @@ def build_report(
     evidence = Evidence.load(root)
     out_dir = Path(output) if output else root / "results" / "report"
     out_dir.mkdir(parents=True, exist_ok=True)
+    # `orion report --out docs` writes docs/report.html. If a directory of that
+    # name already exists - which is what happened when the flag was pointed at
+    # the directory that already held the figures - the write silently creates
+    # a nested docs/report.html/report.html instead of failing.
+    for name in ("report.html", "report.pdf"):
+        if (out_dir / name).is_dir():
+            raise FileExistsError(
+                f"{out_dir / name} is a directory, so the report cannot be "
+                f"written there; remove it or pass a different --out"
+            )
     figures = Path(figures_dir) if figures_dir else root / "docs" / "figures"
 
     # Regenerate figures from the live evidence so the report can never embed a

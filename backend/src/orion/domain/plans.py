@@ -251,7 +251,16 @@ class ObjectiveBreakdown:
         )
 
     def to_dict(self) -> dict[str, float]:
-        return {
+        """The nine components, plus a total that agrees with them.
+
+        `total` is written as the sum of the *rounded* components, not as
+        ``round(self.total, 4)``. Rounding the full-precision sum can land one
+        unit in the last place away from the sum of the rounded parts, which
+        made an export fail its own round trip: reloading it recomputed the
+        total from the components and got a different number. The components
+        are the source of truth; the total is a convenience.
+        """
+        parts = {
             "completion": round(self.completion, 4),
             "priority": round(self.priority, 4),
             "lateness_penalty": round(self.lateness_penalty, 4),
@@ -261,8 +270,23 @@ class ObjectiveBreakdown:
             "overload_penalty": round(self.overload_penalty, 4),
             "idle_move_penalty": round(self.idle_move_penalty, 4),
             "violation_penalty": round(self.violation_penalty, 4),
-            "total": round(self.total, 4),
         }
+        return {**parts, "total": round(self._signed(parts), 4)}
+
+    @staticmethod
+    def _signed(parts: dict[str, float]) -> float:
+        """`total` as a linear combination, shared by ``total`` and ``to_dict``."""
+        return (
+            parts["completion"]
+            + parts["priority"]
+            - parts["lateness_penalty"]
+            - parts["travel_penalty"]
+            - parts["cost_penalty"]
+            - parts["dispatch_penalty"]
+            - parts["overload_penalty"]
+            - parts["idle_move_penalty"]
+            - parts["violation_penalty"]
+        )
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ObjectiveBreakdown:
@@ -497,7 +521,12 @@ class Plan:
             "violations": [v.to_dict() for v in self.violations],
             "utilization": [u.to_dict() for u in self.utilization],
             "metrics": {
-                "score": round(self.score, 4),
+                # From the serialized objective, not the stored `score`, so the
+                # two can never disagree. They did: `score` carried full
+                # precision while `objective.total` was the sum of its rounded
+                # components, and an export of a plan would then fail to reload
+                # to the same number.
+                "score": self.objective.to_dict()["total"],
                 "service_level": round(self.service_level, 6),
                 "tasks_assigned": self.tasks_assigned,
                 "tasks_total": self.tasks_total,

@@ -532,3 +532,73 @@ def test_a_resource_reports_its_availability_windows_through_the_api(
     assert all(
         r.get("unavailable") is not None for r in body["resources"]
     ), "ResourceView exposes no unavailable field"
+
+
+# ----------------------------------------------------------------- exports
+
+
+def test_a_scenario_exports_and_reloads_identically(client, scenario_id):
+    """Export then import, through the public surface, with nothing lost."""
+    exported = client.get(f"/scenarios/{scenario_id}/export")
+    assert exported.status_code == 200, exported.text
+    body = exported.json()
+    assert body["kind"] == "scenario"
+    assert body["content_type"] == "application/json"
+    assert body["bytes"] > 0
+    assert body["provenance"]["git_commit"], "an export without a commit is not evidence"
+    assert body["provenance"]["source"].startswith("api:/scenarios/")
+
+    reloaded = client.post("/exports/scenario", json={"artifact": body["body"]})
+    assert reloaded.status_code == 200, reloaded.text
+    result = reloaded.json()
+    assert result["round_trip_identical"] is True
+    assert result["entity_id"] == scenario_id
+    assert result["detail"]["tasks"] > 0
+    assert result["provenance"]["kind"] == "scenario"
+
+
+def test_a_plan_exports_and_reloads_with_its_status_and_objective(client, plan_id):
+    exported = client.get(f"/plans/{plan_id}/export")
+    assert exported.status_code == 200, exported.text
+    reloaded = client.post("/exports/plan", json={"artifact": exported.json()["body"]})
+    assert reloaded.status_code == 200, reloaded.text
+    result = reloaded.json()
+    assert result["round_trip_identical"] is True
+    assert result["entity_id"] == plan_id
+    assert result["status"] in {
+        "OPTIMAL", "FEASIBLE", "TIME_LIMIT", "INFEASIBLE",
+        "ERROR", "NOT_APPLICABLE", "RELAXATION_OPTIMAL",
+    }
+    assert result["objective"] is not None
+    assert result["detail"]["assignments"] > 0
+    assert result["detail"]["created_at"], "the plan timestamp was lost in the export"
+    assert result["detail"]["solver_statuses"], "solver status was lost in the export"
+
+
+def test_metrics_and_timeline_export_as_csv_with_provenance(client, scenario_id, plan_id):
+    metrics = client.get(f"/scenarios/{scenario_id}/export?format=metrics")
+    assert metrics.status_code == 200, metrics.text
+    body = metrics.json()
+    assert body["content_type"] == "text/csv"
+    lines = body["body"].splitlines()
+    assert lines[0].startswith("# provenance: "), "a CSV export has no provenance"
+    assert len(lines) > 1, "the metrics CSV has no data rows"
+
+    timeline = client.get(f"/plans/{plan_id}/export?format=timeline")
+    assert timeline.status_code == 200, timeline.text
+    tl = timeline.json()["body"].splitlines()
+    assert tl[0].startswith("# provenance: ")
+    header = tl[1].split(",")
+    for column in ("task_id", "resource_id", "start", "end"):
+        assert column in header, f"the timeline CSV has no {column} column"
+
+
+def test_an_unsupported_export_format_is_rejected(client, scenario_id):
+    response = client.get(f"/scenarios/{scenario_id}/export?format=docx")
+    assert response.status_code == 422
+
+
+def test_importing_a_bare_payload_reports_that_it_is_not_an_export(client):
+    response = client.post("/exports/scenario", json={"artifact": '{"hello": "world"}'})
+    assert response.status_code == 422
+    assert "not an ORION export" in response.json()["detail"]
