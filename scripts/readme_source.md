@@ -348,13 +348,23 @@ and no failed API requests occur.
 
 ```bash
 python -m venv .venv
-.venv/Scripts/pip install -e .          # Windows; .venv/bin/pip on Linux/macOS
+# Windows
+.venv\Scripts\pip install -e ".[dev]"
+PYTHONPATH=backend/src .venv\Scripts\python -m orion demo
+# Linux or macOS
+.venv/bin/pip install -e ".[dev]"
 PYTHONPATH=backend/src .venv/bin/python -m orion demo
 ```
 
 The demo generates a scenario, optimizes it, simulates it, disrupts it, repairs
 it, re-optimizes it, runs all six what-if operators, and writes every artifact
-under `results/demo/`.
+under `results/demo/`. `python -m orion verify` re-validates the solvers against
+the proven optima, and `python -m orion report` regenerates the report and all
+eleven figures from the stored experiment artifacts.
+
+The benchmark datasets are downloaded on demand and cached under `data/cache/`;
+no dataset is committed. See [data/PROVENANCE.md](data/PROVENANCE.md) for the
+sources and their terms.
 
 ## CLI
 
@@ -405,10 +415,22 @@ as `{data, provenance}` and CSVs carry provenance as a leading comment.
 ## Docker
 
 ```bash
-docker compose build
-docker compose run --rm tests
-docker compose up
+docker compose build                                     # backend image
+docker compose --profile build run --rm frontend-build    # production bundle
+docker compose up -d                                     # backend :8000, UI :5173
+docker compose run --rm tests                            # the suite in the image
 ```
+
+The two build steps are both required and the order matters. `frontend/dist` is
+git-ignored, so a clean checkout has no bundle until `frontend-build` runs;
+starting nginx without it serves an empty page. That is not a hypothetical -- it
+is exactly what happened here, and the browser walkthrough caught it by looking
+for a plan id the current code rendered differently from a ten-hour-old build.
+
+The backend container runs as an unprivileged user, ships no `.git` (the commit
+is passed in as a build argument so experiment manifests stay attributable), and
+stores its database in a named volume. `docker compose run --rm demo` runs the
+end-to-end demonstration inside the same image.
 
 ## Tests
 
@@ -424,6 +446,19 @@ docker compose up
 | `test_exports.py` | export/import round trips and the report path guard |
 | `test_figures.py` | figures use real data and fail cleanly without it |
 | `test_evidence*.py` | the evidence layer refuses superseded runs |
+
+Four scripts check the things a unit test cannot, because each needs the
+repository or a running server to exist:
+
+| Script | Checks |
+|---|---|
+| `scripts/check_readme.py` | this file matches live evidence, every link resolves, no unfilled marker or personal path |
+| `scripts/check_consistency.py` | artifacts, README and report agree on 107 cross-checked values |
+| `scripts/check_experiments.py` | every stored run is complete, no success carries nothing, no negative gap |
+| `scripts/check_figures.py` | every claimed figure exists, decodes end to end, and is not an orphan |
+
+Reproducibility has its own gate: `python scripts/check_reproducibility.py --both`
+runs the pipeline in two separate processes and diffs every non-volatile field.
 
 ## CI
 
