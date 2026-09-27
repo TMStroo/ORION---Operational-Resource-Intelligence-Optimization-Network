@@ -182,6 +182,51 @@ def collect(evidence: Evidence, test_count: int | None = None) -> dict[str, str]
         raise MissingEvidence("no heuristic row at the largest scalability size")
     values["SCALABILITY_HEURISTIC_ASSIGNED"] = str(heur_max["assigned"])
 
+    # -- disruption recovery means, quoted in the README ----------------
+    recovery = evidence.disruption_recovery()
+    by_strategy = recovery.get("by_strategy_severity", {})
+    runtimes = recovery.get("runtime_s", {})
+    churn = recovery.get("churn", {})
+    means: dict[str, float] = {}
+    for strategy in ("local_repair", "full_reopt"):
+        vals = [v for k, v in by_strategy.items() if k.startswith(f"{strategy}/")]
+        if vals:
+            means[strategy] = sum(vals) / len(vals) * 100.0
+    _require(means, "disruption recovery means")
+    values["RECOVERY_LOCAL_PCT"] = f"{means['local_repair']:.1f}"
+    values["RECOVERY_FULL_PCT"] = f"{means['full_reopt']:.1f}"
+    # How much cheaper local repair is, as a share of the full re-optimization
+    # time. This is a time ratio and must not be confused with recovery quality.
+    if "local_repair" in runtimes and "full_reopt" in runtimes and runtimes["full_reopt"]:
+        values["REPAIR_TIME_SHARE_PCT"] = f"{runtimes['local_repair'] / runtimes['full_reopt'] * 100:.0f}"
+
+    if "local_repair" in churn and "full_reopt" in churn:
+        values["CHURN_LOCAL_PCT"] = f"{churn['local_repair'] * 100:.1f}"
+        values["CHURN_FULL_PCT"] = f"{churn['full_reopt'] * 100:.1f}"
+
+    # -- demo what-if, which is the product's own demonstration -----------
+    demo = evidence.demo or {}
+    whatif = demo.get("whatif_rows") or []
+    if whatif:
+        worst = min(whatif, key=lambda r: float(r.get("change", 0.0)))
+        values["WHATIF_WORST_OPERATOR"] = f"`{worst.get('operator')}`"
+        values["WHATIF_WORST_CHANGE"] = f"{float(worst.get('change', 0.0)):.1f}"
+    if demo.get("baseline_score") is not None:
+        values["DEMO_BASELINE_SCORE"] = f"{float(demo['baseline_score']):.1f}"
+        values["DEMO_ASSIGNED"] = str(demo.get("churn_total", ""))
+    if demo.get("repair_seconds") and demo.get("full_seconds"):
+        values["DEMO_REPAIR_S"] = f"{float(demo['repair_seconds']) * 1000:.0f}"
+        # Choose the unit from the magnitude: printing "0.0 s" for a sub-second
+        # re-optimization is a formatting bug, not a measurement.
+        full = float(demo["full_seconds"])
+        if full >= 1.0:
+            values["DEMO_FULL"] = f"{full:.1f} s"
+        else:
+            values["DEMO_FULL"] = f"{full * 1000:.0f} ms"
+        values["DEMO_SPEEDUP"] = f"{full / float(demo['repair_seconds']):.0f}"
+    if demo.get("recovery_pct") is not None:
+        values["DEMO_RECOVERY_PCT"] = f"{float(demo['recovery_pct']):.1f}"
+
     values["API_CHECKS"] = "72"
     if test_count is not None:
         values["TEST_COUNT"] = str(test_count)

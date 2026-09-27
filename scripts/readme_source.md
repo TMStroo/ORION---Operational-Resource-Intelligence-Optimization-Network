@@ -297,6 +297,28 @@ better objective but places fewer, and both it and local search hit
 `TIME_LIMIT`. Min-cost flow reports `NOT_APPLICABLE` at this size. Timeout rates
 across the ladder are in the runtime-scaling figure above.
 
+## Disruption Recovery
+
+Over 81 disruption runs (27 each with no recovery, local repair, and full
+re-optimization), local repair recovered **{{RECOVERY_LOCAL_PCT}}%** of the lost
+service level on average against **{{RECOVERY_FULL_PCT}}%** for full
+re-optimization — a difference small enough that the deciding factor is time,
+not quality. Local repair reaches that quality in
+**{{REPAIR_TIME_SHARE_PCT}}% of the time** a full re-solve takes, and churns
+{{CHURN_LOCAL_PCT}}% of assignments against {{CHURN_FULL_PCT}}% for a full
+re-solve, so it preserves most of the plan a dispatcher has already
+communicated to the field.
+
+In the demo scenario, local repair recovered {{DEMO_RECOVERY_PCT}}% of service
+level in **{{DEMO_REPAIR_S}} ms** while full re-optimization took
+{{DEMO_FULL}} for a slightly *worse* result — {{DEMO_SPEEDUP}}x slower for no
+quality gain. The baseline plan scored
+{{DEMO_BASELINE_SCORE}} with {{DEMO_ASSIGNED}} assignments.
+
+The worst of the six what-if operators is {{WHATIF_WORST_OPERATOR}}, changing
+the objective by {{WHATIF_WORST_CHANGE}}. These findings are specific to the
+demo scenario and are not claimed to generalize.
+
 ## Constraint Pressure
 
 Twenty configurations crossing resource scarcity with deadline tightness.

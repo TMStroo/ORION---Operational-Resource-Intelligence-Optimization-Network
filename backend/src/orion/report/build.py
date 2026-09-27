@@ -1058,6 +1058,20 @@ SECTIONS = [
     (27, "Conclusion", _s27_conclusion),
 ]
 
+#: Which figures belong in which section. A figure missing from disk is skipped
+#: silently rather than referenced, so the HTML never links a dead image.
+SECTION_FIGURES: dict[int, list[str]] = {
+    4: ["01_baseline_schedule.png"],
+    5: ["02_resource_utilization.png"],
+    10: ["07_disruption_stress.png"],
+    12: ["08_repair_vs_full.png", "09_recovery.png"],
+    16: ["03_solver_comparison.png"],
+    17: ["04_runtime_scaling.png", "05_quality_vs_runtime.png"],
+    18: ["06_constraint_pressure.png"],
+    20: ["10_whatif.png"],
+    22: ["11_failure_taxonomy.png"],
+}
+
 STYLE = """
 :root { --ink:#16202b; --muted:#5b6b7c; --rule:#dfe5ec; --accent:#1f6feb;
         --warn:#b45309; --bg:#ffffff; }
@@ -1155,7 +1169,26 @@ def build_report(
         + "</ol></nav>"
     )
 
+    # Each figure belongs beside the claim it supports, not in a gallery at the
+    # end, so a reader meets the picture while reading the argument. A figure
+    # that does not exist is simply not inserted - the report never references
+    # a file it cannot see.
+    def _inline_figures(names: list[str]) -> str:
+        chunks = []
+        for name in names:
+            path = figures / name
+            if not path.is_file():
+                continue
+            rel = str(path.relative_to(figures.parent)).replace(os.sep, "/")
+            caption = name[:-4].replace("_", " ")
+            chunks.append(
+                f'<figure><img src="{html.escape(rel)}" alt="{html.escape(caption)}">'
+                f"<figcaption>{html.escape(caption)}</figcaption></figure>"
+            )
+        return "".join(chunks)
+
     missing: list[str] = []
+    embedded: list[str] = []
     for number, title, builder in SECTIONS:
         try:
             body = builder(evidence)
@@ -1166,22 +1199,26 @@ def build_report(
             )
         if 'class="gap"' in body or "Not available" in body:
             missing.append(title)
-        parts.append(_section(number, title, body))
+        inline = SECTION_FIGURES.get(number, [])
+        for name in inline:
+            if (figures / name).is_file():
+                embedded.append(name)
+        parts.append(_section(number, title, body + _inline_figures(inline)))
 
-    # figures, embedded relative so the report is portable
+    # A figure that belongs to no section is still real evidence, so list it
+    # rather than dropping it silently.
     if figures.is_dir():
-        images = sorted(p for p in figures.glob("*.png"))
-        if images:
-            items = "".join(
-                f'<figure><img src="{html.escape(str(p.relative_to(figures.parent)).replace(os.sep, "/"))}" '
-                f'alt="{html.escape(p.stem.replace("_", " "))}">'
-                f"<figcaption>{html.escape(p.stem.replace('_', ' '))}</figcaption></figure>"
-                for p in images
-            )
+        orphans = sorted(
+            p.name for p in figures.glob("*.png")
+            if p.name not in embedded and p.name not in
+            {n for names in SECTION_FIGURES.values() for n in names}
+        )
+        if orphans:
             parts.append(
-                "<section id='figures'><h2><span class='num'>28</span>Figures</h2>"
-                "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));"
-                "gap:1.2rem'>" + items + "</div></section>"
+                "<section id='figures'><h2><span class='num'>A</span>Additional figures</h2>"
+                "<p>These were generated but are not attached to a section above.</p><ul>"
+                + "".join(f"<li><code>{html.escape(n)}</code></li>" for n in orphans)
+                + "</ul></section>"
             )
 
     parts.append(
