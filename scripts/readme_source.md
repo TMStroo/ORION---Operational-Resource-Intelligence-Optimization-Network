@@ -463,6 +463,13 @@ Stated plainly, because they are the most useful part of the results:
   insertion gate rejects every position; the engine reports `ERROR` honestly
   rather than presenting an empty plan as a success.
 - **Deterministic outputs, not deterministic runtime.**
+- **CP-SAT results on C101 vary run to run.** The live 30 s row is 1,331.54
+  with 11 late tasks; re-running the same configuration in a clean checkout
+  produced 1,348.34 with 4 late tasks, and the stored history contains values
+  between 1,101.30 and 1,348.34. CP-SAT is an anytime solver stopped by wall
+  clock, so its answer depends on how much of the budget the search consumed.
+  Reproducibility here means "the same configuration and the same stored
+  artifacts", not "the same number on every machine".
 - **Not production-ready and not deployed anywhere.** This is a research
   platform.
 - **The reference enumerator is a proven optimum only on the tiny fixtures.** On
