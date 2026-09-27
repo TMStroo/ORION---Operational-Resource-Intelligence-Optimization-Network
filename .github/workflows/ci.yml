@@ -127,6 +127,8 @@ jobs:
         run: python scripts/check_consistency.py
       - name: Every stored run is complete and honest
         run: python scripts/check_experiments.py
+      - name: Every claimed figure exists and decodes
+        run: python scripts/check_figures.py
       - name: Report regenerates with all sections and figures
         run: python -m orion report --out "$RUNNER_TEMP/report"
       - name: The report is a file, not a directory

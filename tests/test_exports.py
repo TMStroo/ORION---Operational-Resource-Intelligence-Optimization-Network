@@ -214,3 +214,38 @@ def test_loading_a_corrupt_plan_reports_why(tmp_path):
     )
     with pytest.raises(ExportError, match="cannot rebuild plan"):
         load_plan(path)
+
+
+def test_the_pdf_embeds_the_figures_that_the_html_embeds(tmp_path):
+    """The PDF must carry the plots, not only the prose.
+
+    It did not once. The HTML embedded all eleven figures inline, but the PDF
+    path looped over the sections and never consulted the figure map, so the
+    published PDF was twenty-seven sections of numbers and not one chart. A
+    reader comparing the two documents was looking at different reports.
+    """
+    pytest.importorskip("pypdf")
+    from orion.report import build_report
+    from orion.figures_live import FIGURE_INVENTORY
+
+    result = build_report(
+        experiments_dir=REPO_ROOT / "experiments",
+        output=tmp_path,
+        figures_dir=REPO_ROOT / "docs" / "figures",
+        project_root=REPO_ROOT,
+    )
+    assert result.pdf_path is not None, "the report produced no PDF"
+    assert result.pdf_path.is_file()
+
+    import pypdf
+
+    embedded = 0
+    for page in pypdf.PdfReader(str(result.pdf_path)).pages:
+        resources = page.get("/Resources")
+        xobjects = resources.get("/XObject") if resources else None
+        if xobjects:
+            embedded += len(xobjects)
+    assert embedded >= len(FIGURE_INVENTORY), (
+        f"the PDF embeds {embedded} images but the inventory claims "
+        f"{len(FIGURE_INVENTORY)}"
+    )

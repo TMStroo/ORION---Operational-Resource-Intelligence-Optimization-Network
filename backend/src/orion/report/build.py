@@ -1238,12 +1238,19 @@ def build_report(
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import (PageBreak, Paragraph, SimpleDocTemplate,
+        from reportlab.lib.utils import ImageReader
+        from reportlab.platypus import (Image, PageBreak, Paragraph, SimpleDocTemplate,
                                         Spacer)
 
         pdf_path = out_dir / "report.pdf"
         styles = getSampleStyleSheet()
         body_style = ParagraphStyle("body", parent=styles["BodyText"], fontSize=8.6, leading=12)
+        # reportlab's sample stylesheet has no Caption, and inventing one keeps
+        # the figure identifiable in the PDF the way the HTML alt text is.
+        caption_style = ParagraphStyle(
+            "figureCaption", parent=styles["BodyText"], fontSize=7.2, leading=9,
+            alignment=1, textColor="#555555",
+        )
         doc = SimpleDocTemplate(
             str(pdf_path), pagesize=A4,
             leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=16 * mm,
@@ -1257,6 +1264,9 @@ def build_report(
             ),
             Spacer(1, 8),
         ]
+        # The available width between the margins, used to scale every figure
+        # so none of them overflows the page.
+        frame_width = A4[0] - 36 * mm
         for number, title, builder in SECTIONS:
             try:
                 body = builder(evidence)
@@ -1264,6 +1274,27 @@ def build_report(
                 body = f"<i>Section unavailable: {html.escape(str(exc))}</i>"
             story.append(Paragraph(f"{number}. {html.escape(title)}", styles["Heading2"]))
             story.extend(_html_to_story(body, styles, body_style))
+            # The same figure the HTML embeds, in the same section. A report
+            # that drops every plot is a wall of numbers, and this one was
+            # exactly that: 27 sections and not one image.
+            for figure in SECTION_FIGURES.get(number, ()):
+                image_path = figures / figure
+                if not image_path.is_file():
+                    continue
+                reader = ImageReader(str(image_path))
+                pixel_width, pixel_height = reader.getSize()
+                width = frame_width
+                height = width * pixel_height / pixel_width
+                # Cap the height so a tall figure does not push its caption
+                # onto the next page on its own.
+                max_height = A4[1] - 90 * mm
+                if height > max_height:
+                    height = max_height
+                    width = height * pixel_width / pixel_height
+                story.append(Spacer(1, 4))
+                story.append(Image(str(image_path), width=width, height=height))
+                story.append(Paragraph(html.escape(figure), caption_style))
+                story.append(Spacer(1, 6))
             story.append(Spacer(1, 6))
         doc.build(story)
     except Exception as exc:  # reportlab is optional for the HTML path
