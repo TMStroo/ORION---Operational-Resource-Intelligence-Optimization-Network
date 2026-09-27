@@ -532,10 +532,17 @@ def create_app(
             )
             repair_row = store.get_plan_row(repair_id)
             comparison = compare_plans(baseline, outcome.repair.plan, outcome.after_scenario)
+            # The comparison has to be persisted, not just returned: the
+            # Comparison page reads /plans/{id}/comparison, which only knows
+            # about stored records. Returning it without storing it made a
+            # repair look like it had never been compared.
+            store.record_comparison(
+                repair_id, baseline_row.id, repair_id, "local_repair", comparison
+            )
             repair_comparison = S.comparison_view(
                 comparison,
                 kind="local_repair",
-                baseline_plan_id=baseline.id,
+                baseline_plan_id=baseline_row.id,
                 candidate_plan_id=repair_id,
             )
             preserved = (
@@ -567,10 +574,14 @@ def create_app(
                 plan_id=full_id,
             )
             full_row = store.get_plan_row(full_id)
+            full_comp = compare_plans(baseline, outcome.full, outcome.after_scenario)
+            store.record_comparison(
+                full_id, baseline_row.id, full_id, "full_reoptimization", full_comp
+            )
             full_comparison = S.comparison_view(
-                compare_plans(baseline, outcome.full, outcome.after_scenario),
+                full_comp,
                 kind="full_reoptimization",
-                baseline_plan_id=baseline.id,
+                baseline_plan_id=baseline_row.id,
                 candidate_plan_id=full_id,
             )
 
@@ -634,8 +645,10 @@ def create_app(
             label=f"what-if: {request.operator}",
             plan_id=candidate_id,
         )
+        # baseline.id is the loaded plan's own id; the stored row key is the
+        # plan id the client can actually fetch, so record against that.
         store.record_comparison(
-            candidate_id, baseline.id, candidate_id, f"what_if:{request.operator}",
+            candidate_id, plans[0].id, candidate_id, f"what_if:{request.operator}",
             result.comparison,
         )
         return WhatIfResponse(
@@ -645,12 +658,12 @@ def create_app(
             modification=result.modification,
             status=result.status,
             seconds=result.seconds,
-            baseline_plan_id=baseline.id,
+            baseline_plan_id=plans[0].id,
             scenario_plan_id=candidate_id,
             comparison=S.comparison_view(
                 result.comparison,
                 kind=f"what_if:{result.operator}",
-                baseline_plan_id=baseline.id,
+                baseline_plan_id=plans[0].id,
                 candidate_plan_id=candidate_id,
             ),
         )
@@ -692,7 +705,22 @@ def create_app(
                     baseline_plan_id=record.baseline_plan_id,
                     candidate_plan_id=record.candidate_plan_id,
                     churn=churn,
-                    deltas=[S.MetricDeltaView(**d) for d in deltas],
+                    # MetricDelta.to_dict carries two derived fields the response
+                # model does not declare (change_pct, improved). Project
+                # explicitly rather than splatting, so a domain-side addition
+                # cannot turn a read into a 500.
+                deltas=[
+                    S.MetricDeltaView(
+                        name=str(d.get("name", "")),
+                        label=str(d.get("label", "")),
+                        before=float(d.get("before", 0.0)),
+                        after=float(d.get("after", 0.0)),
+                        change=float(d.get("change", 0.0)),
+                        unit=str(d.get("unit", "")),
+                        higher_is_better=bool(d.get("higher_is_better", True)),
+                    )
+                    for d in deltas
+                ],
                 )
             )
             bucket = metrics.setdefault(record.kind, {})
@@ -700,10 +728,13 @@ def create_app(
                 bucket[str(delta["label"])] = float(delta["after"])
         if not items:
             # A plan nobody compared against is a real state, not an error.
+            # `baseline_plan_id` repeats this plan: there is no baseline, and
+            # putting the scenario id there would read as a real baseline
+            # reference the client cannot fetch.
             items.append(
                 S.ComparisonView(
                     kind="none",
-                    baseline_plan_id=row.scenario_id,
+                    baseline_plan_id=plan_id,
                     candidate_plan_id=plan_id,
                     churn=S.ChurnView(
                         changed_assignments=0,
@@ -833,14 +864,24 @@ def _build_disruption(request: DisruptRequest, scenario: Any) -> Any:
         if magnitude >= 0.2
         else DisruptionSeverity.LOW
     )
-    at_time = (
-        request.at_time
-        if request.at_time is not None
-        else int(
+    # The default time has to fall inside the target's shift, not merely inside
+    # the horizon. A resource-unavailability window is intersected with the
+    # resource's own rostered hours, so a 25%-into-the-horizon default lands
+    # before a late-starting shift and produces a disruption that changes
+    # nothing while reporting a severity - a no-op dressed as a result. Fall
+    # back to the target's shift start, clamped into the horizon.
+    if request.at_time is not None:
+        at_time = int(request.at_time)
+    else:
+        target_resource = next(
+            (r for r in scenario.resources if r.id == target), None
+        )
+        shift_start = getattr(target_resource, "shift_start", scenario.horizon.start)
+        quarter = int(
             scenario.horizon.start
             + (scenario.horizon.end - scenario.horizon.start) * 0.25
         )
-    )
+        at_time = max(int(shift_start), quarter)
     return Disruption(
         id=f"DSR-{uuid.uuid4().hex[:8]}",
         type=request.type,

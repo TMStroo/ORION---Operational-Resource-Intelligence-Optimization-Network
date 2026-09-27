@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import itertools
+from dataclasses import replace
 from typing import Iterable, Mapping, Sequence
 
 from orion.domain.entities import Scenario
@@ -192,6 +193,12 @@ def build_plan(
         if minutes:
             dispatch += resource.fixed_dispatch_cost
 
+    # The heuristic and the local repair both construct their SolverRun with
+    # objective=0.0 and the comment "filled in by build_plan". Nothing did, so
+    # every heuristic plan carried a solver run reporting 0.0 next to a plan
+    # scored at ~340. The rescored value is authoritative (see the module
+    # docstring), so write it back onto the run before it is stored. The
+    # mismatch check below must see the original, so it is taken first.
     effective_status = status or run.status
     if has_hard_violation(violations) and effective_status in {
         SolverStatus.OPTIMAL,
@@ -208,6 +215,9 @@ def build_plan(
             "solver_reported": round(run.objective, 4),
             "scored": round(breakdown.total, 4),
         }
+
+    if run.objective == 0.0 and run.feasible:
+        run = replace(run, objective=round(breakdown.total, 6))
 
     plan = Plan(
         id=plan_id or next_plan_id(),

@@ -108,6 +108,13 @@ def scenario_detail(row: Any, scenario: Any) -> ScenarioDetail:
                 status=_name(r.status),
                 max_work_minutes=r.max_work_minutes,
                 capacity=dict(r.capacity),
+                # Every window the resource has lost. A disruption that removes
+                # working time leaves `status` untouched, so this is the only
+                # place a client can see that the resource is no longer whole.
+                unavailable=[
+                    {"start": int(iv.start), "end": int(iv.end)}
+                    for iv in getattr(r, "unavailable", ())
+                ],
             )
             for r in scenario.resources
         ],

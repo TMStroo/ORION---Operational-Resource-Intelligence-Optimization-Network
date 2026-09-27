@@ -36,3 +36,6 @@ Thumbs.db
 
 # Downloaded benchmark archives (re-fetched on demand; checksums in data/PROVENANCE.md)
 data/cache/
+
+# Dev-server and dev-database logs from the end-to-end walkthrough
+results/*.log

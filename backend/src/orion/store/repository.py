@@ -69,6 +69,25 @@ def _build_engine(url: str, *, echo: bool = False) -> Engine:
     return engine
 
 
+def _solver_and_runtime(plan: Any) -> tuple[str, float]:
+    """Return (solver, runtime_s) for a plan.
+
+    `Plan` carries no solver or runtime field of its own; both live on the
+    solver runs. The runtime is the slowest recorded run, which is the same rule
+    `orion.evaluation.metrics` uses, so a plan's runtime cannot disagree between
+    the metrics report and the API.
+
+    A plan with no runs at all - a locally repaired plan whose run was not
+    attached - reports an empty solver and 0.0 s rather than an invented one.
+    """
+    runs = list(getattr(plan, "solver_runs", ()) or ())
+    if not runs:
+        return "", 0.0
+    solver = str(getattr(runs[-1], "solver", "") or "")
+    runtime = max((float(getattr(r, "runtime_s", 0.0) or 0.0) for r in runs), default=0.0)
+    return solver, runtime
+
+
 class Store:
     """Relational store for scenarios, plans, disruptions and experiments.
 
@@ -331,19 +350,29 @@ class Store:
                 session.flush()
 
             objective = plan.objective
+            # `Plan` has no `solver`, `completion` or `runtime_seconds` field.
+            # Reading them with getattr defaulted every plan to a 0 objective
+            # runtime, a 0% completion and an empty solver, which then became the
+            # authoritative numbers in every API response. Derive them instead:
+            # the solver is the one that produced the plan, completion is the
+            # share of demand dispatched, and runtime is the slowest recorded
+            # run - the same rule evaluation.metrics uses.
+            plan_solver, plan_runtime = _solver_and_runtime(plan)
+            assigned = len(plan.assignments)
+            total = int(getattr(plan, "tasks_total", 0) or 0)
             row = PlanRow(
                 id=identifier,
                 scenario_id=resolved_scenario,
                 label=label,
                 status=str(getattr(plan, "status", "")),
-                solver=str(getattr(plan, "solver_name", "") or ""),
+                solver=plan_solver,
                 objective=float(getattr(objective, "total", 0.0) or 0.0),
-                completion=float(getattr(plan, "completion", 0.0) or 0.0),
+                completion=(assigned / total) if total else 0.0,
                 late_tasks=int(getattr(plan, "late_tasks", 0) or 0),
-                tasks_assigned=len(plan.assignments),
-                tasks_total=int(getattr(plan, "tasks_total", 0) or 0),
-                runtime_s=float(getattr(plan, "runtime_seconds", 0.0) or 0.0),
-                infeasible=bool(getattr(plan, "infeasible", False)),
+                tasks_assigned=assigned,
+                tasks_total=total,
+                runtime_s=plan_runtime,
+                infeasible=str(getattr(plan, "status", "")) == "INFEASIBLE",
                 plan_json=dumps(plan.to_dict()),
             )
             for idx, assignment in enumerate(plan.assignments):
@@ -585,16 +614,13 @@ class Store:
                 churn_total=int(getattr(churn, "total", 0) or 0),
                 churn_ratio=float(getattr(churn, "ratio", 0.0) or 0.0),
                 recovery_pct=float(recovery_pct or 0.0),
+                # `MetricDelta.to_dict` already carries name, unit and
+                # higher_is_better. Hand-rolling a reduced dict here dropped
+                # them, so reading a stored comparison back raised a
+                # ValidationError on the required fields and the endpoint
+                # returned 500. The domain owns the shape; store what it says.
                 deltas_json=dumps(
-                    [
-                        {
-                            "label": str(getattr(d, "label", "")),
-                            "before": float(getattr(d, "before", 0.0) or 0.0),
-                            "after": float(getattr(d, "after", 0.0) or 0.0),
-                            "change": float(getattr(d, "change", 0.0) or 0.0),
-                        }
-                        for d in getattr(comparison, "deltas", ()) or ()
-                    ]
+                    [d.to_dict() for d in getattr(comparison, "deltas", ()) or ()]
                 ),
             )
             session.add(row)

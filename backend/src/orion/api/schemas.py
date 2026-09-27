@@ -99,6 +99,12 @@ class ResourceView(ApiModel):
     status: str
     max_work_minutes: int
     capacity: dict[str, float] = Field(default_factory=dict)
+    # The blocks of the shift a resource has lost. A disruption that removes
+    # working time does not change `status` - the resource is still a vehicle,
+    # it is simply off the road for part of the day. Without this the client
+    # cannot tell an intact scenario from a disrupted one, because every
+    # resource still reads AVAILABLE.
+    unavailable: list[dict[str, int]] = Field(default_factory=list)
 
 
 class ScenarioDetail(ScenarioSummary):

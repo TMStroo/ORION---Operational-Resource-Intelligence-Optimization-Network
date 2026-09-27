@@ -415,3 +415,120 @@ def test_experiment_detail_includes_rows(client):
 
 def test_unknown_experiment_is_404(client):
     assert client.get("/experiments/no-such-experiment").status_code == 404
+
+
+# --------------------------------- defects the real browser run exposed
+
+
+def _first_resource_id(client, scenario_id: str) -> str:
+    body = client.get(f"/scenarios/{scenario_id}").json()
+    return next(r["id"] for r in body["resources"])
+
+
+def _disrupt_and_replan(client, scenario_id):
+    """Apply a resource disruption and repair it, through the public surface."""
+    target = _first_resource_id(client, scenario_id)
+    response = client.post(
+        f"/scenarios/{scenario_id}/replan",
+        json={
+            "disruption_type": "RESOURCE_UNAVAILABLE",
+            "target_id": target,
+            "magnitude": 0.5,
+            "duration": 180,
+            "solver": "HEURISTIC",
+            "time_budget_s": 5.0,
+            "run_full": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return target, response.json()
+
+
+def test_replan_persists_its_comparison_so_the_plan_is_not_an_orphan(
+    client, scenario_id
+):
+    """A comparison that is only returned, never stored, is invisible forever.
+
+    The Comparison page reads /plans/{id}/comparison, which knows only about
+    stored records. Returning a repair comparison without persisting it made a
+    completed repair look like it had never been compared against anything.
+    """
+    _target, body = _disrupt_and_replan(client, scenario_id)
+    repair = body["repair_plan"]
+    assert repair is not None, "replan produced no repair plan"
+
+    stored = client.get(f"/plans/{repair['id']}/comparison").json()
+    assert stored["items"], "the repair plan has no stored comparison"
+    assert stored["items"][0]["kind"] != "none", (
+        f"the repair comparison was stored as {stored['items'][0]['kind']!r}"
+    )
+    assert stored["items"][0]["deltas"], "the stored comparison carries no deltas"
+
+
+def test_a_comparison_names_a_baseline_the_client_can_fetch(client, scenario_id):
+    """A dangling baseline id reads as resolvable and is not.
+
+    The comparison has to reference the stored plan row, not the loaded plan's
+    own id, or a client following the reference gets a 404.
+    """
+    _target, body = _disrupt_and_replan(client, scenario_id)
+    repair_id = body["repair_plan"]["id"]
+    baseline_id = client.get(f"/plans/{repair_id}/comparison").json()["items"][0][
+        "baseline_plan_id"
+    ]
+    assert client.get(f"/plans/{baseline_id}").status_code == 200, (
+        f"comparison names baseline {baseline_id!r}, which is not fetchable"
+    )
+
+
+def test_a_plan_with_no_comparison_does_not_impersonate_a_baseline(client, plan_id):
+    """The empty state is real, but it must not name a scenario as a baseline."""
+    body = client.get(f"/plans/{plan_id}/comparison").json()
+    assert body["items"], "a plan with no comparison should still report the state"
+    only = body["items"][0]
+    assert only["kind"] == "none"
+    assert only["baseline_plan_id"] == plan_id, (
+        f"placeholder baseline is {only['baseline_plan_id']!r}, not the plan itself"
+    )
+
+
+def test_a_default_resource_disruption_actually_removes_working_time(
+    client, scenario_id
+):
+    """A no-op disruption reported as HIGH severity is the worst failure mode.
+
+    The default disruption time sat at 25% of the horizon, which for a
+    late-starting resource fell entirely before its shift, so the availability
+    window intersected to nothing while the response still claimed a severity.
+    """
+    target = _first_resource_id(client, scenario_id)
+    before = client.get(f"/scenarios/{scenario_id}").json()
+    resource = next(r for r in before["resources"] if r["id"] == target)
+
+    applied = client.post(
+        f"/scenarios/{scenario_id}/disrupt",
+        json={
+            "type": "RESOURCE_UNAVAILABLE",
+            "target_id": target,
+            "magnitude": 0.5,
+            "duration": 240,
+        },
+    )
+    assert applied.status_code == 200, applied.text
+
+    after = client.get(f"/scenarios/{applied.json()['after_scenario_id']}").json()
+    disrupted = next(r for r in after["resources"] if r["id"] == target)
+    assert disrupted["unavailable"], (
+        "a default RESOURCE_UNAVAILABLE removed no working time; "
+        f"shift={resource['shift_start']}-{resource['shift_end']}"
+    )
+
+
+def test_a_resource_reports_its_availability_windows_through_the_api(
+    client, scenario_id
+):
+    """Lost working time has to be readable, or the UI cannot show it."""
+    body = client.get(f"/scenarios/{scenario_id}").json()
+    assert all(
+        r.get("unavailable") is not None for r in body["resources"]
+    ), "ResourceView exposes no unavailable field"
