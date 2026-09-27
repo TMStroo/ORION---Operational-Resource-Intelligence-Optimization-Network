@@ -93,7 +93,12 @@ def figure_schedule(plan: Any, path: Path, *, title: str = "Baseline schedule") 
             )
     ax.set_yticks(range(len(resources)))
     ax.set_yticklabels(resources, fontsize=7)
-    ax.set_xlim(min(a.start for a in plan.assignments), max(a.end for a in plan.assignments))
+    # Pad the time axis so the first and last bars are not flush against the
+    # spines, which hides their real start and end times.
+    earliest = min(a.start for a in plan.assignments)
+    latest = max(a.end for a in plan.assignments)
+    pad = max(10, int((latest - earliest) * 0.03))
+    ax.set_xlim(earliest - pad, latest + pad)
     _style(
         ax,
         f"{title}  -  {plan.tasks_assigned}/{plan.tasks_total} tasks, "
@@ -103,9 +108,14 @@ def figure_schedule(plan: Any, path: Path, *, title: str = "Baseline schedule") 
     from matplotlib.ticker import FuncFormatter
 
     ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _p: _hhmm(v)))
+    # Placed outside the axes: inside, the frameless legend overlapped the bars
+    # and its "on time" swatch vanished against a blue block.
     ax.legend(
-        handles=[Patch(color=PALETTE["primary"], label="on time"), Patch(color=PALETTE["bad"], label="late")],
-        fontsize=8, loc="lower right", frameon=False,
+        handles=[
+            Patch(color=PALETTE["primary"], label="on time"),
+            Patch(color=PALETTE["bad"], label="late"),
+        ],
+        fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False,
     )
     return _finish(fig, path)
 
@@ -125,6 +135,103 @@ def figure_utilization(plan: Any, path: Path) -> Path:
     _style(ax, f"Resource utilisation  -  mean {plan.service_level:.0%} service level",
            ylabel="minutes")
     ax.legend(fontsize=8, frameon=False)
+    ax.tick_params(axis="x", rotation=90)
+    return _finish(fig, path)
+
+
+def available_minutes(resource: Any) -> int:
+    """Minutes the domain considers this resource actually able to work.
+
+    This is the *availability* denominator, not the raw shift length: the
+    shift window minus every interval the domain has blocked, further capped by
+    `max_work_minutes`. It is derived from the same `Resource` fields the
+    scheduler validates against (`shift`, `unavailable`, `max_work_minutes`) so
+    the figure cannot disagree with the engine about what was possible.
+
+    A resource with no positive availability is returned as 0 rather than
+    guessed at; callers must omit such a resource rather than divide by it.
+    """
+    shift = resource.shift
+    # Blocked minutes are the union of the blocked intervals clipped to shift.
+    blocked = 0
+    for window in resource.unavailable:
+        lo = max(window.start, shift.start)
+        hi = min(window.end, shift.end)
+        if hi > lo:
+            blocked += hi - lo
+    shift_minutes = max(0, shift.end - shift.start)
+    return max(0, min(shift_minutes - blocked, int(resource.max_work_minutes)))
+
+
+def figure_utilization_rate(
+    plan: Any,
+    scenario: Any,
+    path: Path,
+    *,
+    title: str = "Resource utilisation",
+) -> Path:
+    """Worked minutes over *available* minutes, per dispatched resource.
+
+    The denominator is :func:`available_minutes`, i.e. real domain
+    availability. Utilisation is deliberately not inferred from task count: a
+    resource given one long task and one given five short ones may have very
+    different worked-time fractions.
+
+    Resources with no positive availability are **omitted** and reported in
+    the subtitle, because a percentage of zero available minutes is undefined
+    and inventing one would be fabrication.
+    """
+    resources = {r.id: r for r in scenario.resources}
+    rows = [u for u in plan.utilization if u.assigned_tasks > 0]
+    if not rows:
+        raise ValueError("cannot draw utilisation for a plan that dispatched nothing")
+
+    usable: list[tuple[Any, int, int]] = []
+    omitted: list[str] = []
+    for u in rows:
+        resource = resources.get(u.resource_id)
+        if resource is None:
+            omitted.append(f"{u.resource_id} (not in scenario)")
+            continue
+        available = available_minutes(resource)
+        if available <= 0:
+            omitted.append(f"{u.resource_id} (no available time)")
+            continue
+        usable.append((u, u.worked_minutes, available))
+
+    if not usable:
+        raise ValueError(
+            "no dispatched resource has positive available time, so utilisation "
+            f"is undefined (omitted: {', '.join(omitted)})"
+        )
+
+    usable.sort(key=lambda row: -(row[1] / row[2]))
+    usable = usable[:24]
+    labels = [str(u.resource_id) for u, _w, _a in usable]
+    rates = [(w / a) * 100.0 for _u, w, a in usable]
+    worked = [w for _u, w, _a in usable]
+    available = [a for _u, _w, a in usable]
+
+    fig, ax = plt.subplots(figsize=(max(6.8, 0.44 * len(labels) + 2.4), 4.6))
+    ax.bar(labels, rates, color=PALETTE["primary"], label="worked / available")
+    ax.axhline(100.0, color=PALETTE["bad"], linewidth=1.0, linestyle="--", alpha=0.85)
+    for index, (label, rate, work, avail) in enumerate(zip(labels, rates, worked, available)):
+        ax.text(index, rate + 1.5, f"{rate:.0f}%", ha="center", va="bottom", fontsize=7)
+    _style(
+        ax,
+        f"{title}  -  {len(labels)} dispatched of {len(scenario.resources)} resources; "
+        f"worked minutes / available minutes",
+        ylabel="utilisation (%)",
+    )
+    ax.set_ylim(0, max(115.0, max(rates) * 1.15))
+    if omitted:
+        ax.text(
+            0.99, 0.02,
+            "omitted (no comparable availability): " + ", ".join(omitted[:4])
+            + ("..." if len(omitted) > 4 else ""),
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=6.5,
+            color=PALETTE["muted"],
+        )
     ax.tick_params(axis="x", rotation=90)
     return _finish(fig, path)
 
@@ -194,20 +301,28 @@ def figure_repair_vs_full(
     """Two panels: quality recovered and time taken, per strategy."""
     if not rows:
         raise ValueError("no rows to compare")
-    strategies = ["local_repair", "full_reopt"]
+    # Readable tick labels: the raw keys are underscored and collide with the
+    # value annotations on a 9.6in two-panel canvas, which is what made
+    # tight_layout give up.
+    strategies = ["local repair", "full re-opt"]
     quality = [float(r.get("recovered_pct", 0.0) or 0.0) for r in rows]
     seconds = [max(1e-6, float(r.get("replan_seconds", 0.0) or 0.0)) for r in rows]
-    fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.9))
+    # Canvas height is sized for the value annotations, not just the axes.
+    # tight_layout measures every text artist, and the bold 9pt labels sit
+    # outside the bar tops, so a canvas sized only for the axes makes
+    # tight_layout give up and leave cramped margins.
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 5.4))
     colors = [PALETTE["warn"], PALETTE["primary"]]
     axes[0].bar(strategies, quality, color=colors, width=0.55)
     axes[0].set_ylim(0, max(100.0, max(quality) * 1.2))
+    axes[1].set_ylim(min(seconds) * 0.6, max(seconds) * 2.4)
     for i, v in enumerate(quality):
-        axes[0].text(i, v + 1.5, f"{v:.0f}%", ha="center", fontsize=9, fontweight="bold")
+        axes[0].text(i, v + 2.0, f"{v:.0f}%", ha="center", fontsize=8, fontweight="bold")
     _style(axes[0], "service recovered (%)", ylabel="%")
     axes[1].bar(strategies, seconds, color=colors, width=0.55)
     axes[1].set_yscale("log")
     for i, v in enumerate(seconds):
-        axes[1].text(i, v * 1.25, f"{v*1000:.1f} ms", ha="center", fontsize=9, fontweight="bold")
+        axes[1].text(i, v * 1.35, f"{v * 1000:.1f} ms", ha="center", fontsize=8, fontweight="bold")
     _style(axes[1], "replanning time (log)", ylabel="seconds")
     fig.suptitle(title, fontsize=11, fontweight="bold", x=0.02, ha="left")
     return _finish(fig, path)

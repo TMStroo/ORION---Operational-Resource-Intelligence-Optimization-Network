@@ -21,18 +21,55 @@ from orion.figures import (
     figure_recovery,
     figure_repair_vs_full,
     figure_runtime_vs_size,
+    figure_schedule,
     figure_solver_comparison,
+    figure_utilization_rate,
     figure_whatif,
 )
 
-# README shows a small subset; the report embeds the full set.
-README_FIGURES = [
-    "03_runtime_scaling.png",
-    "04_quality_vs_runtime.png",
-    "06_repair_vs_full.png",
-    "08_constraint_pressure.png",
-    "09_disruption_stress.png",
+#: The one authoritative figure inventory. Every figure the project claims to
+#: have lives here, in order, with the file name the README and the report link
+#: to. The checker, the report builder and the README all read this list rather
+#: than hard-coding their own numbering, which is how the numbering drifted
+#: apart from the docs in the first place.
+FIGURE_INVENTORY: list[dict[str, str]] = [
+    {"file": "01_baseline_schedule.png", "title": "Baseline schedule",
+     "source": "results/demo/baseline_plan.json"},
+    {"file": "02_resource_utilization.png", "title": "Resource utilisation",
+     "source": "results/demo/baseline_plan.json + results/demo/scenario.json"},
+    {"file": "03_solver_comparison.png", "title": "Solver comparison",
+     "source": "solver_comparison"},
+    {"file": "04_runtime_scaling.png", "title": "Runtime scaling",
+     "source": "scalability"},
+    {"file": "05_quality_vs_runtime.png", "title": "Quality versus runtime",
+     "source": "scalability"},
+    {"file": "06_constraint_pressure.png", "title": "Constraint pressure",
+     "source": "constraint_pressure"},
+    {"file": "07_disruption_stress.png", "title": "Disruption impact",
+     "source": "disruption_stress"},
+    {"file": "08_repair_vs_full.png", "title": "Local repair versus full re-optimization",
+     "source": "disruption_stress"},
+    {"file": "09_recovery.png", "title": "Recovery comparison",
+     "source": "disruption_stress"},
+    {"file": "10_whatif.png", "title": "What-if analysis",
+     "source": "results/demo/whatif_comparison.csv"},
+    {"file": "11_failure_taxonomy.png", "title": "Failure taxonomy",
+     "source": "experiments/*/metrics.json"},
 ]
+
+#: The subset promoted into the README, straight after the opening sections.
+README_FIGURES = [
+    "01_baseline_schedule.png",
+    "05_quality_vs_runtime.png",
+    "04_runtime_scaling.png",
+    "08_repair_vs_full.png",
+    "10_whatif.png",
+]
+
+
+def figure_names() -> list[str]:
+    """Every file name the project claims, in inventory order."""
+    return [entry["file"] for entry in FIGURE_INVENTORY]
 
 
 def generate_figures(
@@ -61,7 +98,47 @@ def generate_figures(
         except Exception as exc:  # a missing suite must be visible, not fatal
             skipped[name] = f"{kind}: {type(exc).__name__}: {exc}"
 
-    # --- 01/02: solver comparison -------------------------------------
+    # --- 01/02: the product's own baseline plan -------------------------
+    # These come from the demo's persisted plan rather than from a benchmark
+    # suite, because they depict the product's actual output: the schedule a
+    # user is handed and how hard each resource worked. The plan is reloaded
+    # through orion.importing, i.e. the same path a user takes when importing
+    # an export, so the figure cannot show a plan the product could not
+    # actually reload.
+    demo_plan = root / "results" / "demo" / "baseline_plan.json"
+    demo_scenario = root / "results" / "demo" / "scenario.json"
+    if demo_plan.is_file():
+        def _plan_figures() -> None:
+            from orion.importing import load_plan, load_scenario
+
+            plan, _prov = load_plan(demo_plan)
+            attempt(
+                "01_baseline_schedule.png",
+                "demo baseline plan",
+                lambda p: figure_schedule(plan, p, title="Baseline schedule"),
+            )
+            if demo_scenario.is_file():
+                scenario, _sprov = load_scenario(demo_scenario)
+                attempt(
+                    "02_resource_utilization.png",
+                    "demo baseline plan + scenario",
+                    lambda p: figure_utilization_rate(plan, scenario, p),
+                )
+            else:
+                skipped["02_resource_utilization.png"] = (
+                    f"{demo_scenario.name} not present, so availability is unknown"
+                )
+
+        try:
+            _plan_figures()
+        except Exception as exc:  # a missing demo must be visible, not fatal
+            skipped["01_baseline_schedule.png"] = f"demo plan: {type(exc).__name__}: {exc}"
+            skipped["02_resource_utilization.png"] = f"demo plan: {type(exc).__name__}: {exc}"
+    else:
+        skipped["01_baseline_schedule.png"] = "results/demo/baseline_plan.json not present"
+        skipped["02_resource_utilization.png"] = "results/demo/baseline_plan.json not present"
+
+    # --- 03: solver comparison -----------------------------------------
     if evidence.has("solver_comparison"):
         rows = evidence.get("solver_comparison").rows
         # One budget, so the bars compare solvers rather than budgets.
@@ -69,26 +146,18 @@ def generate_figures(
         preferred = budgets[-1] if budgets else ""
         comparison = [r for r in rows if r.get("time_budget_s") == preferred]
         attempt(
-            "01_solver_comparison.png",
+            "03_solver_comparison.png",
             "solver_comparison",
-            lambda p: figure_solver_comparison(comparison, p, title="Solver comparison (public benchmarks)"),
+            lambda p: figure_solver_comparison(comparison, p, title="Solver comparison"),
         )
-        # Synthetic suite too, if present in scalability
-    if evidence.has("solver_comparison"):
-        rows = evidence.get("solver_comparison").rows
-        synthetic = [r for r in rows if r.get("dataset") not in ("solomon", "jobshop")]
-        if synthetic:
-            attempt(
-                "02_solver_comparison_synthetic.png",
-                "solver_comparison (synthetic)",
-                lambda p: figure_solver_comparison(synthetic, p, title="Solver comparison (synthetic scenarios)"),
-            )
+    else:
+        skipped["03_solver_comparison.png"] = "no live solver_comparison experiment"
 
-    # --- 03/04: scalability -------------------------------------------
+    # --- 04/05: scalability -------------------------------------------
     if evidence.has("scalability"):
         rows = evidence.scalability()
         attempt(
-            "03_runtime_scaling.png",
+            "04_runtime_scaling.png",
             "scalability",
             lambda p: figure_runtime_vs_size(
                 [{**r, "num_tasks": r["tasks"]} for r in rows],
@@ -97,40 +166,17 @@ def generate_figures(
             ),
         )
         attempt(
-            "04_quality_vs_runtime.png",
+            "05_quality_vs_runtime.png",
             "scalability",
             lambda p: figure_quality_vs_runtime(
-                rows, p, title="Solution quality versus runtime (scalability ladder)"
+                rows, p, title="Solution quality versus runtime"
             ),
         )
     else:
-        skipped["03_runtime_scaling.png"] = "no live scalability experiment"
-        skipped["04_quality_vs_runtime.png"] = "no live scalability experiment"
+        skipped["04_runtime_scaling.png"] = "no live scalability experiment"
+        skipped["05_quality_vs_runtime.png"] = "no live scalability experiment"
 
-    # --- 05: public benchmark quality ---------------------------------
-    if evidence.has("solver_comparison"):
-        public = [
-            {
-                "solver": r["solver"],
-                "objective": r["objective"] or 0.0,
-                "runtime_s": r["runtime_s"] or 0.0,
-                "status": r["status"],
-            }
-            for r in evidence.public_benchmarks()
-            if r["dataset"] == "solomon" and r["budget_s"] == max(
-                (x["budget_s"] for x in evidence.public_benchmarks() if x["dataset"] == "solomon"),
-                key=float,
-                default="",
-            )
-        ]
-        if public:
-            attempt(
-                "05_public_benchmark.png",
-                "solver_comparison (solomon)",
-                lambda p: figure_quality_vs_runtime(public, p, title="Solomon c101: quality versus runtime"),
-            )
-
-    # --- 06: repair vs full -------------------------------------------
+    # --- 08: local repair versus full re-optimization ------------
     if evidence.has("disruption_stress"):
         rows = evidence.get("disruption_stress").rows
         grouped: dict[str, dict[str, float]] = {}
@@ -151,16 +197,16 @@ def generate_figures(
         ]
         if averages:
             attempt(
-                "06_repair_vs_full.png",
+                "08_repair_vs_full.png",
                 "disruption_stress",
                 lambda p: figure_repair_vs_full(
-                    averages, p, title="Local repair vs full re-optimization (mean over all disruptions)"
+                    averages, p, title="Local repair vs full re-optimization"
                 ),
             )
     else:
-        skipped["06_repair_vs_full.png"] = "no live disruption_stress experiment"
+        skipped["08_repair_vs_full.png"] = "no live disruption_stress experiment"
 
-    # --- 07: recovery by severity -------------------------------------
+    # --- 09: recovery by severity -------------------------------------
     if evidence.has("disruption_stress"):
         summary = evidence.disruption_recovery()
         stages = [
@@ -170,36 +216,36 @@ def generate_figures(
         ]
         if stages:
             attempt(
-                "07_recovery.png",
+                "09_recovery.png",
                 "disruption_stress",
-                lambda p: figure_recovery(stages, p, title="Service recovery by disruption severity (local repair)"),
+                lambda p: figure_recovery(stages, p, title="Recovery by disruption severity (local repair)"),
             )
     else:
-        skipped["07_recovery.png"] = "no live disruption_stress experiment"
+        skipped["09_recovery.png"] = "no live disruption_stress experiment"
 
-    # --- 08: constraint pressure --------------------------------------
+    # --- 06: constraint pressure -------------------------------------
     if evidence.has("constraint_pressure"):
         rows = evidence.get("constraint_pressure").rows
         attempt(
-            "08_constraint_pressure.png",
+            "06_constraint_pressure.png",
             "constraint_pressure",
-            lambda p: figure_constraint_pressure(rows, p, title="Service level under resource scarcity and deadline pressure"),
+            lambda p: figure_constraint_pressure(rows, p, title="Service level under constraint pressure"),
         )
     else:
-        skipped["08_constraint_pressure.png"] = "no live constraint_pressure experiment"
+        skipped["06_constraint_pressure.png"] = "no live constraint_pressure experiment"
 
-    # --- 09: disruption stress ----------------------------------------
+    # --- 07: disruption impact ---------------------------------------
     if evidence.has("disruption_stress"):
         rows = evidence.get("disruption_stress").rows
         attempt(
-            "09_disruption_stress.png",
+            "07_disruption_stress.png",
             "disruption_stress",
-            lambda p: figure_disruption_stress(rows, p, title="Service level by disruption rate and recovery strategy"),
+            lambda p: figure_disruption_stress(rows, p, title="Service level by disruption rate and strategy"),
         )
     else:
-        skipped["09_disruption_stress.png"] = "no live disruption_stress experiment"
+        skipped["07_disruption_stress.png"] = "no live disruption_stress experiment"
 
-    # --- 10: what-if (from the demo artifacts) -------------------------
+    # --- 10: what-if (from the demo artifacts) ------------------------
     whatif_csv = root / "results" / "demo" / "whatif_comparison.csv"
     if whatif_csv.is_file():
         import csv as _csv
@@ -209,7 +255,7 @@ def generate_figures(
         attempt(
             "10_whatif.png",
             "demo what-if",
-            lambda p: figure_whatif(rows, p, title="What-if analysis: baseline versus modified scenario"),
+            lambda p: figure_whatif(rows, p, title="What-if analysis"),
         )
     else:
         skipped["10_whatif.png"] = "results/demo/whatif_comparison.csv not present"
@@ -247,9 +293,16 @@ def generate_figures(
     else:
         skipped["11_failure_taxonomy.png"] = "no failure records in the live summaries"
 
+    # Anything in the inventory that produced no file is reported, so a missing
+    # figure surfaces here instead of as a broken image link in the README.
+    for name in figure_names():
+        if name not in written and name not in skipped:
+            skipped[name] = "not produced and not attempted"
+
     return {
         "output_dir": out,
         "written": sorted(written),
         "skipped": skipped,
+        "inventory": FIGURE_INVENTORY,
         "integrity_problems": evidence.integrity_problems(),
     }
