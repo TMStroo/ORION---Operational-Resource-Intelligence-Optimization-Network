@@ -252,7 +252,7 @@ def enumerate_optimum(
                 breakdown = objective_breakdown_from_assignments(
                     assignments,
                     scenario,
-                    resource_speeds={r.id: r.default_speed_kmh for r in scenario.resources},
+                    resource_speeds={r.id: r.speed_factor for r in scenario.resources},
                     violation_penalty_count=0,
                     hard_violation_count=0,
                     overload_minutes={
@@ -264,8 +264,23 @@ def enumerate_optimum(
                     },
                 )
             else:
+                # `resource_speeds` must be the per-resource `speed_factor` for
+                # the same reason `build_plan` passes it: the travel term is
+                # `distance_km / speed`, so omitting it silently scores every
+                # assignment at an implicit speed of 1.0. On a scenario whose
+                # resources have varied speed factors the enumerator then
+                # reports a *different* objective from the one every solver is
+                # scored with, and a solver that legitimately sequenced better
+                # appears to beat a "proven optimum".
+                #
+                # Measured on seed 3 of a 3-task/2-resource instance: the same
+                # assignment list scores 17.0234 here and 17.0293 through
+                # `build_plan`. The tiny fixtures all have speed_factor 1.0, so
+                # the existing reference-validation evidence is unaffected.
                 breakdown = objective_breakdown_from_assignments(
-                    assignments, scenario
+                    assignments,
+                    scenario,
+                    resource_speeds={r.id: r.speed_factor for r in scenario.resources},
                 )
             if best_score is None or breakdown.total > best_score:
                 best_score = breakdown.total
