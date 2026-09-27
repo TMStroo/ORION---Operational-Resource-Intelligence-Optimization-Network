@@ -212,7 +212,7 @@ class Store:
                         release_time=task.release_time,
                         deadline=task.deadline,
                         duration=task.duration,
-                        priority=str(getattr(task.priority, "value", task.priority)),
+                        priority=str(getattr(task.priority, "name", task.priority)),
                         status=str(getattr(task.status, "value", task.status)),
                         required_capabilities=join_values(sorted(task.required_capabilities)),
                         dependencies=dumps(list(task.dependencies)),
@@ -314,7 +314,12 @@ class Store:
         from a plan that was never attempted, and the table should say which.
         """
         resolved_scenario = scenario_id or getattr(plan, "scenario_id", "") or ""
-        identifier = plan_id or getattr(plan, "id", "") or f"plan-{abs(hash(plan))}"
+        # Prefer the plan's own id. Minting a separate store key means the id in
+        # a comparison response is not the id /plans/{id} resolves, which makes
+        # every cross-plan reference in the API a dangling pointer. When the
+        # plan has no id - a synthetic one - the caller supplies a key.
+        own_id = str(getattr(plan, "id", "") or "")
+        identifier = plan_id or own_id or f"plan-{abs(hash(plan))}"
         with self.session() as session:
             if session.get(ScenarioRow, resolved_scenario) is None:
                 raise UnknownEntityError(
@@ -354,9 +359,7 @@ class Store:
                         travel_distance_km=float(
                             getattr(assignment, "travel_distance_km", 0.0) or 0.0
                         ),
-                        priority=str(
-                            getattr(assignment.priority, "value", assignment.priority)
-                        ),
+                        priority=str(getattr(assignment.priority, "name", assignment.priority)),
                         lateness=int(getattr(assignment, "lateness", 0) or 0),
                     )
                 )
@@ -713,7 +716,16 @@ def _coerce(enum_value: Any, fallback: str) -> Any:
 
 
 def _plan_from_row(row: PlanRow) -> Plan:
+    """Rebuild a Plan, with the store key as its id.
+
+    The row key is the only id a client can resolve through the API, so the
+    domain object must report it rather than whatever the solver stamped inside
+    the payload.
+    """
     payload = loads(row.plan_json, {})
     if not payload:
         raise ConfigError(f"plan {row.id!r} has no stored payload")
-    return Plan.from_dict(payload)
+    plan = Plan.from_dict(payload)
+    plan.id = row.id
+    plan.scenario_id = row.scenario_id
+    return plan

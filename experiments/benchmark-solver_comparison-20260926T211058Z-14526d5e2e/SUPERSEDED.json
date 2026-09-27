@@ -1,7 +1,7 @@
 {
   "status": "superseded",
   "reason": "Duplicate run superseded by a later run of the same suite after the MIN_COST_FLOW capacity-unit and error-path fixes.",
-  "replaced_by": null,
+  "replaced_by": "benchmark-solver_comparison-20260926T230445Z-bf748adf7e",
   "superseded_utc": "2026-09-26T21:19:33+00:00",
   "note": "This directory is retained as a historical record of a run that was executed. It must not be quoted as evidence."
 }

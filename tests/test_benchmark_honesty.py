@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from orion.domain.plans import SolverStatus
+from orion.evidence import Evidence
 from orion.experiments.benchmarks import _COMPARABLE_STATUSES
 
 # `SolverStatus` and `_COMPARABLE_STATUSES` are namespaces of plain string
@@ -242,3 +243,78 @@ def test_every_experiment_manifest_records_provenance():
             assert manifest.get(key), f"{directory.name}: manifest missing {key}"
         checked += 1
     assert checked, "no experiment manifests found"
+
+def test_every_superseded_run_names_its_successor_and_reason():
+    """A retired run must say what replaced it and why.
+
+    The filesystem store accepts `superseded_by=None`, and 33 runs were written
+    that way - the reason mentioned the successor in prose, but the field itself
+    was null. Anything that follows the chain (which run is current? what did we
+    retract?) then has to parse English.
+    """
+    root = Path(__file__).resolve().parents[1] / "experiments"
+    if not root.is_dir():
+        pytest.skip("no experiments directory")
+
+    manifest_path = root / "manifest.json"
+    superseded = []
+    for directory in sorted(root.iterdir()):
+        path = directory / "manifest.json"
+        if not path.is_file():
+            continue
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            pytest.fail(f"{directory.name}/manifest.json is not valid JSON: {exc}")
+        if manifest.get("status") == "superseded":
+            superseded.append((directory.name, manifest))
+
+    assert superseded, "the project supersedes runs; none found is itself a signal"
+    for name, manifest in superseded:
+        assert manifest.get("superseded_by"), (
+            f"{name} is superseded but names no successor; the chain is unfollowable"
+        )
+        assert manifest.get("superseded_reason"), (
+            f"{name} is superseded with no recorded reason"
+        )
+        assert manifest.get("superseded_utc"), f"{name} has no retirement timestamp"
+        assert (directory := root / name).is_dir()
+        assert (root / name / "SUPERSEDED.json").is_file(), (
+            f"{name} has no sidecar marking it as not-evidence"
+        )
+        # The successor must name a run that actually exists.
+        successor = manifest["superseded_by"]
+        assert (root / successor / "manifest.json").is_file(), (
+            f"{name} names successor {successor!r}, which is not on disk"
+        )
+
+
+def test_superseded_runs_are_excluded_from_live_suites():
+    """The live set must be disjoint from the superseded set.
+
+    This is the invariant the whole evidence layer rests on: if a run can be
+    both, a figure or a README number can quote a result the project withdrew.
+    """
+    root = Path(__file__).resolve().parents[1] / "experiments"
+    if not root.is_dir():
+        pytest.skip("no experiments directory")
+
+    statuses: dict[str, str] = {}
+    for directory in sorted(root.iterdir()):
+        path = directory / "manifest.json"
+        if path.is_file():
+            statuses[directory.name] = json.loads(path.read_text(encoding="utf-8")).get(
+                "status", ""
+            )
+
+    evidence = Evidence.load(root.parent)
+    live_ids = {suite.experiment_id for suite in evidence.suites.values()}
+    assert live_ids, "no live suites found"
+    for experiment_id in live_ids:
+        assert statuses.get(experiment_id) == "succeeded", (
+            f"{experiment_id} is treated as live evidence but its manifest says "
+            f"{statuses.get(experiment_id)!r}"
+        )
+    assert len(live_ids) == len(evidence.suites), (
+        "two live runs of the same suite; the newer must supersede the older"
+    )

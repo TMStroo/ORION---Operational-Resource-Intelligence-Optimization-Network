@@ -319,7 +319,11 @@ def create_app(
             explain=request.explain,
         )
         plan = result.plan
-        plan_id = f"PLAN-{scenario_id}-{uuid.uuid4().hex[:8]}"
+        # Key the plan by its own id. Minting a second id here would mean the id
+        # in a later comparison response is not the one /plans/{id} resolves.
+        plan_id = plan.id
+        if not plan_id:
+            plan_id = f"PLAN-{scenario_id}-{uuid.uuid4().hex[:8]}"
         store.save_plan(
             plan,
             scenario_id=scenario_id,
@@ -516,7 +520,10 @@ def create_app(
         preserved = 0.0
         recovery = 0.0
         if outcome.repair.plan is not None:
-            repair_id = f"PLAN-{scenario_id}-repair-{uuid.uuid4().hex[:8]}"
+            repair_id = (
+                outcome.repair.plan.id
+                or f"PLAN-{scenario_id}-repair-{uuid.uuid4().hex[:8]}"
+            )
             store.save_plan(
                 outcome.repair.plan,
                 scenario_id=scenario_id,
@@ -550,7 +557,9 @@ def create_app(
         full_row = None
         full_comparison = None
         if outcome.full is not None:
-            full_id = f"PLAN-{scenario_id}-full-{uuid.uuid4().hex[:8]}"
+            full_id = (
+                outcome.full.id or f"PLAN-{scenario_id}-full-{uuid.uuid4().hex[:8]}"
+            )
             store.save_plan(
                 outcome.full,
                 scenario_id=scenario_id,
@@ -565,6 +574,10 @@ def create_app(
                 candidate_plan_id=full_id,
             )
 
+        # Comparisons must cite the ids a client can actually use. The plan
+        # object carries the solver's own id (PLAN-0001) while the store keys it
+        # as PLAN-<scenario>-repair-...; a comparison naming the former is a
+        # dangling reference the UI cannot follow.
         return ReplanResponse(
             disruption=S.disruption_view(outcome.disruption, outcome.impact),
             impact=S.disruption_view(outcome.disruption, outcome.impact),
@@ -611,7 +624,10 @@ def create_app(
         result = app.state.whatif.run(
             scenario, baseline, request.operator, request.parameter, seed=request.seed
         )
-        candidate_id = f"PLAN-{scenario_id}-whatif-{uuid.uuid4().hex[:8]}"
+        candidate_id = (
+            result.scenario_plan.id
+            or f"PLAN-{scenario_id}-whatif-{uuid.uuid4().hex[:8]}"
+        )
         store.save_plan(
             result.scenario_plan,
             scenario_id=scenario_id,

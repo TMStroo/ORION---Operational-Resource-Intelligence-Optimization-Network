@@ -32,8 +32,18 @@ from orion.api.schemas import (
 
 
 def _name(value: Any) -> str:
-    """Enum member or plain string -> its name/value as a string."""
-    return str(getattr(value, "value", value))
+    """Enum member or plain string -> a stable readable string.
+
+    ``Priority`` is an IntEnum, so ``str(p.value)`` is "3" and a client reading
+    `priority` would have to know the numbering. The member name is what a
+    human wants and what stays stable if the ordering is ever renumbered.
+
+    Plain strings pass through unchanged, so this is safe on values that are
+    already strings.
+    """
+    if isinstance(value, str):
+        return value
+    return str(getattr(value, "name", None) or getattr(value, "value", value))
 
 
 def scenario_summary(row: Any) -> ScenarioSummary:

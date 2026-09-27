@@ -972,6 +972,6 @@
   "completed_utc": "2026-09-26T21:01:20+00:00",
   "superseded_utc": "2026-09-26T21:19:33+00:00",
   "superseded_reason": "Duplicate run superseded by a later run of the same suite after the MIN_COST_FLOW capacity-unit and error-path fixes.",
-  "superseded_by": null,
+  "superseded_by": "benchmark-scalability-20260926T230011Z-bf748adf7e",
   "schema_version": "orion.experiment/1"
 }
