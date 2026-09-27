@@ -39,6 +39,7 @@ data/cache/
 
 # Dev-server and dev-database logs from the end-to-end walkthrough
 results/*.log
+results/vite.log
 
 # Reproducibility check output: two throwaway runs, regenerated on demand by
 # scripts/check_reproducibility.py. Not evidence, so not tracked.
